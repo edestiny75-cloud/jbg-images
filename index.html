@@ -437,8 +437,9 @@ function fnUrl(sku){ return SB_PUB+encodeURIComponent(sku)+'_FN.jpg'; }     // F
 const PRINTS_PUB=SB_URL+'/storage/v1/object/public/prints/';
 const GCS_PRINTS='https://storage.googleapis.com/jbg-print-files-2026/';           // all 265 real print PDFs (Google Cloud)
 function printPdfUrl(sku){ return GCS_PRINTS+encodeURIComponent(sku)+'.pdf'; }      // real Fiery print PDF — same file as the Catalog Dashboard
+function printPdf12x18Url(sku){ return GCS_PRINTS+encodeURIComponent(sku)+'_12x18.pdf'; } // separate 12x18 cut-file PDF (only some SKUs)
 function fnPdfUrl(sku){ return PRINTS_PUB+encodeURIComponent(sku)+'_FN.pdf'; }       // real FNSKU 30-up PDF (Supabase)
-function assetUrl(sku,field){ if(field==='pngB')return sideBUrl(sku); if(field==='fnsku')return fnUrl(sku); if(field==='pdf'||field==='pdf12x18')return printPdfUrl(sku); return imgFor(sku); }
+function assetUrl(sku,field){ if(field==='pngB')return sideBUrl(sku); if(field==='fnsku')return fnUrl(sku); if(field==='pdf12x18')return printPdf12x18Url(sku); if(field==='pdf')return printPdfUrl(sku); return imgFor(sku); }
 /* Print poster PDFs are hosted on Google Cloud Storage (jbg-print-files-2026) — the "Open Print PDF" button opens the exact production file in the browser, same as the Catalog Dashboard. FNSKU label PDFs stay on Supabase (fnPdfUrl). */
 function thumbEl(t,sku){ const s=imgFor(sku,t); if(s) return `<span class="thumb"><img src="${esc(s)}" style="width:100%;height:100%;object-fit:cover" onerror="this.parentNode.textContent='${initials(sku)}'"></span>`; return `<span class="thumb">${initials(sku)}</span>`;}
 function statusChip(s){const m={asin:['#0a5aa8','#dcecfb','by ASIN'],matched:['#1c7c46','#e3f6ea','matched'],aliased:['#1c7c46','#e3f6ea','aliased'],needs_confirm:['#8a6d00','#fff6cf','confirm'],unmapped:['#a12622','#fde2e0','no file yet']};const[c,b,t]=m[s]||['#555','#eee',s];return `<span class="chip" style="color:${c};background:${b}">${t}</span>`;}
@@ -680,7 +681,7 @@ function detailBody(sku,opts){
     <div class="dfnsku-row"><div class="dfnsku-img"><img src="${esc(fnUrl(sku))}" onerror="this.parentNode.classList.add('ph')"></div>
     <div><div class="dfnsku-code">FNSKU: ${esc(b.fnskuCode||'—')}</div>
     <div class="dfnsku-note">Print the full 30-up sheet to your <b>label printer</b> with the gold button below. The Print File goes to your <b>Fiery</b> separately — two different printers.</div></div></div></div>`:'';
-  const actions=(cfg.actions||[]).map(a=>`<a class="btn ${a.primary?'primary':'ghost'} sm" href="${esc(assetUrl(sku,a.field))}" target="_blank" rel="noopener">${esc(a.label)}</a>`).join('');
+  const actions=(cfg.actions||[]).filter(a=>!(a.field==='pdf12x18' && !p.pdf12x18)).map(a=>`<a class="btn ${a.primary?'primary':'ghost'} sm" href="${esc(assetUrl(sku,a.field))}" target="_blank" rel="noopener">${esc(a.label)}</a>`).join('');
   const fnskuBtn=hasFn?`<a class="btn gold sm" href="${esc(fnPdfUrl(sku))}" target="_blank" rel="noopener">Open FNSKU Sheet → Label Printer</a>`:'';
   const sh=sheetsOf(sku);
   const bstrip = sh>1 ? `<div class="bstrip ${isBundleFile(p.pdf)?'':'bad'}">📦 ${sh}-poster bundle — prints the bundle master ${isBundleFile(p.pdf)?`<code>${esc(fileName(p.pdf))}</code>`:'<b>⚠ no bundle file — add it</b>'}</div>`:'';
