@@ -262,6 +262,11 @@ tr.held{opacity:.5}
 .oc-dots{display:flex;gap:5px;flex-wrap:wrap;justify-content:center;flex:1}
 .dot{width:9px;height:9px;border-radius:50%;background:#d5dfe8;cursor:pointer}
 .dot.pk{background:var(--mint)}.dot.cur{outline:2px solid var(--mint-d);outline-offset:1px}
+.addrow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:14px;background:#0f1115;border:1px solid #23262e;border-radius:12px;padding:12px 14px}
+.addrow .addlbl{font-weight:800;color:var(--gold,#e5b567);font-size:13px}
+.addrow select{flex:1;min-width:220px;background:#000;color:var(--ink);border:1px solid #2a2e37;border-radius:9px;padding:9px 10px;font-size:13px}
+.addrow input{width:74px;background:#000;color:var(--ink);border:1px solid #2a2e37;border-radius:9px;padding:9px 8px;font-size:14px;text-align:center}
+.addrow .addhint{font-size:11px;color:#8397ab;flex-basis:100%}
 .gsheet{font-size:12.5px;font-weight:700;color:#0a7c3f;background:#e3f6ea;padding:6px 12px;border-radius:20px}
 .oc-adjust{display:flex;align-items:center;justify-content:center;gap:8px;font-size:13px;font-weight:600;color:#5b6b7f;margin-bottom:12px}
 .oc-adjust input{width:64px;text-align:center;font-weight:800;font-size:15px}
@@ -396,7 +401,11 @@ function imgFor(sku,t){ const p=byRaw.get(sku); return (p&&p.thumb_url)||THUMBS[
 const SB_PUB=SB_URL+'/storage/v1/object/public/thumbs/';
 function sideBUrl(sku){ return SB_PUB+encodeURIComponent(sku)+'_B.jpg'; }   // Side B (uploaded)
 function fnUrl(sku){ return SB_PUB+encodeURIComponent(sku)+'_FN.jpg'; }     // FNSKU 30-up sheet (uploaded)
+const PRINTS_PUB=SB_URL+'/storage/v1/object/public/prints/';
+function printPdfUrl(sku){ return PRINTS_PUB+encodeURIComponent(sku)+'.pdf'; }      // real print PDF (uploaded)
+function fnPdfUrl(sku){ return PRINTS_PUB+encodeURIComponent(sku)+'_FN.pdf'; }       // real FNSKU 30-up PDF (uploaded)
 function assetUrl(sku,field){ if(field==='pngB')return sideBUrl(sku); if(field==='fnsku')return fnUrl(sku); return imgFor(sku); }
+/* print poster PDFs (20–90 MB each) can't be web-hosted on the free tier — the real print goes to Fiery via the local agent; this button opens the poster image for on-screen reference. FNSKU label PDFs are tiny and ARE hosted (fnPdfUrl). */
 function thumbEl(t,sku){ const s=imgFor(sku,t); if(s) return `<span class="thumb"><img src="${esc(s)}" style="width:100%;height:100%;object-fit:cover" onerror="this.parentNode.textContent='${initials(sku)}'"></span>`; return `<span class="thumb">${initials(sku)}</span>`;}
 function statusChip(s){const m={asin:['#0a5aa8','#dcecfb','by ASIN'],matched:['#1c7c46','#e3f6ea','matched'],aliased:['#1c7c46','#e3f6ea','aliased'],needs_confirm:['#8a6d00','#fff6cf','confirm'],unmapped:['#a12622','#fde2e0','no file yet']};const[c,b,t]=m[s]||['#555','#eee',s];return `<span class="chip" style="color:${c};background:${b}">${t}</span>`;}
 const ALL_SKU_OPTS = PRODUCTS.map(p=>p.sku).sort().map(s=>`<option value="${esc(s)}">`).join('');
@@ -522,8 +531,31 @@ function viewPacker(){
   if(ab){
     const total=ab.items.length;
     let step=Math.min(STATE.packStep||0,total-1); if(step<0)step=0;
-    const picked=ab.items.filter(i=>i.picked).length, allPicked=picked===total;
+    const picked=ab.items.filter(i=>i.picked).length, allPicked=total>0&&picked===total;
+    const addOpts0=[...new Map(STATE.batch.map(r=>[r.sku,r])).values()]
+      .sort((a,b)=>(a.title||a.sku).localeCompare(b.title||b.sku))
+      .map(r=>`<option value="${esc(r.sku)}">${esc(shortName(r))} · ${r.size} · ${esc(r.sku)}</option>`).join('');
+    const emptyAddPanel=`<div class="addrow">
+      <span class="addlbl">＋ Add an item from the list into Box ${ab.box_no}</span>
+      <select id="addSku"><option value="">— pick a product —</option>${addOpts0}</select>
+      <input id="addQty" type="number" min="1" value="1" title="quantity">
+      <button class="btn sm" onclick="addItemToBox(${ab.box_no})">Add to box</button></div>`;
+    if(total===0){
+      body=`<div class="boxbanner"><div><div class="bb-no">BOX ${ab.box_no}</div><div class="bb-sub">this box is empty — add items from the list, or release it</div></div>
+        <button class="btn ghost sm" onclick="releaseBox(${ab.box_no})">✕ Release box</button></div>${emptyAddPanel}`;
+      return `<h1>Packer · iPad</h1><p class="sub">Pick a box, then click through it one item at a time — big picture, the exact amount to pick, and the <b>UPC / FNSKU / WPS</b> label. Two packers can each take a different box.</p>${picker}${body}`;
+    }
     const i=ab.items[step];
+    const addOpts=[...new Map(STATE.batch.map(r=>[r.sku,r])).values()]
+      .sort((a,b)=>(a.title||a.sku).localeCompare(b.title||b.sku))
+      .map(r=>`<option value="${esc(r.sku)}">${esc(shortName(r))} · ${r.size} · ${esc(r.sku)}</option>`).join('');
+    const addPanel=`<div class="addrow">
+      <span class="addlbl">＋ Add another item from the list into Box ${ab.box_no}</span>
+      <select id="addSku"><option value="">— pick a product —</option>${addOpts}</select>
+      <input id="addQty" type="number" min="1" value="1" title="quantity">
+      <button class="btn sm" onclick="addItemToBox(${ab.box_no})">Add to box</button>
+      <span class="addhint">use the <b>×</b> on any item above to remove or change its qty</span>
+    </div>`;
     body=`<div class="boxbanner">
       <div><div class="bb-no">BOX ${ab.box_no}</div><div class="bb-sub">use a <b>20×14×10</b> carton · ${ab.size} posters</div></div>
       <div class="bb-stat"><span>${ab.units} units</span><span>${lb(ab.weight_oz)} lb</span><span>${picked}/${total} picked</span></div>
@@ -541,13 +573,14 @@ function viewPacker(){
             <button class="${i.label==='wps'?'done':''}" onclick="printLabel(${ab.box_no},${step},'wps')">Print WPS</button>
           </div>
           <label class="oc-check"><input type="checkbox" ${i.picked?'checked':''} onchange="togglePick(${ab.box_no},${step})"> picked & in the box</label>
+          <button class="btn ghost sm" onclick="removeBoxItem(${ab.box_no},${step})" title="Take this item out of the box">✕ Remove from box</button>
         </div>
         <div class="oc-nav">
           <button class="btn ghost" ${step===0?'disabled':''} onclick="packStep(${step-1})">← Prev</button>
           <div class="oc-dots">${ab.items.map((x,ix)=>`<span class="dot ${ix===step?'cur':''} ${x.picked?'pk':''}" onclick="packStep(${ix})"></span>`).join('')}</div>
           ${step<total-1?`<button class="btn" onclick="packStep(${step+1})">Next →</button>`:`<button class="btn ${allPicked?'':'ghost'}" onclick="packBox(${ab.box_no})">✓ Box done → next box</button>`}
         </div>
-      </div>`;
+      </div>${addPanel}`;
   }
   return `<h1>Packer · iPad</h1><p class="sub">Pick a box, then click through it one item at a time — big picture, the exact amount to pick, and the <b>UPC / FNSKU / WPS</b> label. Two packers can each take a different box.</p>${picker}${body}`;
 }
@@ -612,7 +645,7 @@ function detailBody(sku,opts){
     <div><div class="dfnsku-code">FNSKU: ${esc(b.fnskuCode||'—')}</div>
     <div class="dfnsku-note">Print the full 30-up sheet to your <b>label printer</b> with the gold button below. The Print File goes to your <b>Fiery</b> separately — two different printers.</div></div></div></div>`:'';
   const actions=(cfg.actions||[]).map(a=>`<a class="btn ${a.primary?'primary':'ghost'} sm" href="${esc(assetUrl(sku,a.field))}" target="_blank" rel="noopener">${esc(a.label)}</a>`).join('');
-  const fnskuBtn=hasFn?`<a class="btn gold sm" href="${esc(fnUrl(sku))}" target="_blank" rel="noopener">Open FNSKU Sheet → Label Printer</a>`:'';
+  const fnskuBtn=hasFn?`<a class="btn gold sm" href="${esc(fnPdfUrl(sku))}" target="_blank" rel="noopener">Open FNSKU Sheet → Label Printer</a>`:'';
   const sh=sheetsOf(sku);
   const bstrip = sh>1 ? `<div class="bstrip ${isBundleFile(p.pdf)?'':'bad'}">📦 ${sh}-poster bundle — prints the bundle master ${isBundleFile(p.pdf)?`<code>${esc(fileName(p.pdf))}</code>`:'<b>⚠ no bundle file — add it</b>'}</div>`:'';
   return `<div class="dhead"><h3>${esc(p.title||sku)}</h3>
@@ -652,6 +685,21 @@ function recomputeBox(b){ b.weight_oz=+b.items.reduce((s,i)=>s+i.qty*(i.unitOz||
 function editBoxItem(n,ix,v){ const b=STATE.boxes.find(x=>x.box_no===n); if(!b)return; let q=Math.max(0,parseInt(v,10)||0); b.items[ix].qty=q; if(b.items[ix].actual==null||b.items[ix].actual>q)b.items[ix].actual=q; sbItem(b.items[ix],{qty:q,actual_qty:b.items[ix].actual}); recomputeBox(b); render(); }
 function removeBoxItem(n,ix){ const b=STATE.boxes.find(x=>x.box_no===n); if(!b)return; const it=b.items[ix]; if(it._id)SB.from('box_items').delete().eq('id',it._id).then(()=>{}); b.items.splice(ix,1); recomputeBox(b); toast('Removed '+it.sku+' from Box '+n); render(); }
 function boxSearch(v){ STATE.boxQ=v; render(); }
+function addItemToBox(n){
+  const sel=document.getElementById('addSku'), qi=document.getElementById('addQty');
+  if(!sel||!sel.value){toast('Pick a product to add first');return;}
+  const sku=sel.value; let qty=Math.max(1,parseInt(qi&&qi.value,10)||1);
+  const b=STATE.boxes.find(x=>x.box_no===n); if(!b)return;
+  const p=byRaw.get(sku); const row=STATE.batch.find(r=>r.sku===sku)||{};
+  const size=(p&&p.size)||row.size||b.size; const unit=unitOzFor(sku,size);
+  const existing=b.items.find(i=>i.sku===sku);
+  if(existing){ existing.qty+=qty; existing.actual=(existing.actual||0)+qty; sbItem(existing,{qty:existing.qty,actual_qty:existing.actual}); recomputeBox(b); toast('Added '+qty+'× more '+sku+' to Box '+n); render(); return; }
+  const it={sku, title:(p&&p.title)||row.title||sku, asin:(p&&p.asin)||row.asin||'', qty, actual:qty, picked:false, thumb:(p&&p.thumb_url)||row.thumb||'', fnsku:(p&&p.fnsku)||row.fnsku||'', unitOz:unit, label:'none'};
+  b.items.push(it); recomputeBox(b);
+  if(b._id){ SB.from('box_items').insert({box_id:b._id,product_sku:sku,asin:it.asin||null,title:it.title||null,qty:qty,actual_qty:qty,picked:false,label_status:'none',thumb_url:it.thumb||null,fnsku_path:it.fnsku||null}).select().single().then(({data})=>{if(data)it._id=data.id;}); }
+  STATE.packStep=b.items.length-1;
+  toast('Added '+qty+'× '+shortName(it)+' to Box '+n); render();
+}
 function setActual(n,ix,val){ const b=STATE.boxes.find(x=>x.box_no===n); if(!b)return; let v=parseInt(val,10); if(isNaN(v)||v<0)v=0; if(v>b.items[ix].qty)v=b.items[ix].qty; b.items[ix].actual=v; sbItem(b.items[ix],{actual_qty:v}); render(); }
 function togglePick(n,ix){ const b=STATE.boxes.find(x=>x.box_no===n); if(b){const it=b.items[ix];it.picked=!it.picked; sbItem(it,{picked:it.picked}); if(it.picked && ix<b.items.length-1)STATE.packStep=ix+1; render();} }
 function packBox(n){ const b=STATE.boxes.find(x=>x.box_no===n); if(!b)return;
