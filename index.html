@@ -96,10 +96,13 @@ select,input[type=file],input[type=text],input:not([type]){font-size:13px;paddin
 .tag.a{background:#fbefd6;color:#7a5600}.tag.ok{background:#e3f6ea;color:#1c7c46}
 .pmodal{position:fixed;inset:0;background:rgba(16,28,44,.55);display:none;align-items:center;justify-content:center;z-index:60;padding:18px}
 .pmodal.on{display:flex}
-.pm-card{background:#fff;border-radius:16px;max-width:640px;width:100%;padding:22px;position:relative;box-shadow:0 20px 60px rgba(0,0,0,.35)}
-.pm-x{position:absolute;top:12px;right:14px;border:0;background:#eef2f6;width:30px;height:30px;border-radius:50%;font-size:18px;cursor:pointer;color:#41566d}
+.pm-card{background:#fff;border-radius:16px;max-width:640px;width:100%;position:relative;box-shadow:0 20px 60px rgba(0,0,0,.35);max-height:92vh;display:flex;flex-direction:column;overflow:hidden}
+.pm-head{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:10px;padding:12px 14px;background:#fff;border-bottom:1px solid #e6ecf1;border-radius:16px 16px 0 0}
+.pm-back{flex:1;text-align:left;border:0;background:#eef2f6;color:#1c2b3a;font-weight:800;font-size:15px;padding:12px 16px;border-radius:11px;cursor:pointer}
+.pm-back:hover{background:#e2e9ef}
+.pm-x{border:0;background:#eef2f6;width:38px;height:38px;border-radius:50%;font-size:20px;cursor:pointer;color:#41566d;flex:0 0 auto}
 .pm-card{max-width:780px}
-.pm-body{display:block}
+.pm-body{display:block;padding:18px 22px 22px;overflow:auto;-webkit-overflow-scrolling:touch;flex:1 1 auto;min-height:0}
 /* dashboard-style detail (shared by catalog modal + packer click-through) */
 .dhead h3{margin:0 0 4px;font-size:19px}
 .dmeta{font-size:13px;color:#5b6b7f;background:#eef2f6;display:inline-block;padding:2px 9px;border-radius:6px;margin-bottom:6px}
@@ -162,6 +165,8 @@ input::placeholder{color:#6b7686}
 .dfnsku{background:#221d0c;border-color:#4a3d14}.dfnsku-h{color:#e6c072}.dfnsku-code{color:#fff}.dfnsku-note{color:#c9b98a}
 .dsteps{background:#12141a;color:#b7c1cd}
 .pm-x{background:#242832;color:#c3ccd7}
+.pm-head{background:#0b0c0f;border-bottom:1px solid #23262e}
+.pm-back{background:#1c1f26;color:#eef1f5}.pm-back:hover{background:#262b34}
 .gsheet{background:#12351f;color:var(--mint)}
 .shipbanner{border-left-color:var(--mint-d)}.shipbanner b{color:#fff}.shiplabel{color:#7f8b9a}
 .shortbar{background:#241416;border-color:#5a2b28;color:#f0a6a2}
@@ -267,6 +272,24 @@ tr.held{opacity:.5}
 .addrow select{flex:1;min-width:220px;background:#000;color:var(--ink);border:1px solid #2a2e37;border-radius:9px;padding:9px 10px;font-size:13px}
 .addrow input{width:74px;background:#000;color:var(--ink);border:1px solid #2a2e37;border-radius:9px;padding:9px 8px;font-size:14px;text-align:center}
 .addrow .addhint{font-size:11px;color:#8397ab;flex-basis:100%}
+.btn.gold{background:#e6b34d;border-color:#e6b34d;color:#3a2c05;font-weight:800}
+.btn.gold:hover{background:#f0c266}
+/* photo-grid picker */
+.pick-card{max-width:900px;height:92vh}
+.pick-search{padding:10px 14px;border-bottom:1px solid #23262e;background:#0b0c0f}
+.pick-search input{width:100%;background:#000;color:var(--ink);border:1px solid #2a2e37;border-radius:10px;padding:11px 12px;font-size:15px}
+.pick-qty{display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:800;color:var(--gold);white-space:nowrap}
+.pick-qty input{width:64px;background:#000;color:var(--ink);border:1px solid #2a2e37;border-radius:9px;padding:9px 8px;font-size:15px;text-align:center}
+.pick-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px}
+.pk-card{background:#15171c;border:1px solid #23262e;border-radius:12px;padding:8px;cursor:pointer;transition:transform .06s,border-color .1s;text-align:center}
+.pk-card:hover,.pk-card:active{border-color:var(--mint);transform:translateY(-2px)}
+.pk-im{background:#0e1014;border-radius:9px;height:120px;display:flex;align-items:center;justify-content:center;overflow:hidden;margin-bottom:6px;font-weight:800;color:#5f6b7a}
+.pk-im img{width:100%;height:100%;object-fit:contain}
+.pk-t{font-size:12px;font-weight:700;line-height:1.25;color:var(--ink);min-height:30px}
+.pk-s{font-size:10.5px;color:#8397ab;margin:2px 0 5px}.pk-s code{font-size:10px}
+.pk-badges{display:flex;flex-wrap:wrap;gap:4px;justify-content:center}
+.pk-b{font-size:9.5px;font-weight:800;padding:2px 6px;border-radius:5px}
+.pk-b.ok{background:#12351f;color:var(--mint)}.pk-b.no{background:#3a2323;color:#e08a8a}.pk-b.sz{background:#20242c;color:#aab4c2}
 .gsheet{font-size:12.5px;font-weight:700;color:#0a7c3f;background:#e3f6ea;padding:6px 12px;border-radius:20px}
 .oc-adjust{display:flex;align-items:center;justify-content:center;gap:8px;font-size:13px;font-weight:600;color:#5b6b7f;margin-bottom:12px}
 .oc-adjust input{width:64px;text-align:center;font-weight:800;font-size:15px}
@@ -290,7 +313,7 @@ tr.held{opacity:.5}
 </header>
 <main id="app"></main>
 <div id="toast"></div>
-<div id="pmodal" class="pmodal"><div class="pm-card"><button class="pm-x" onclick="closeProd()">×</button><div class="pm-body"></div></div></div>
+<div id="pmodal" class="pmodal" onclick="if(event.target.id==='pmodal')closeProd()"><div class="pm-card"><div class="pm-head"><button class="pm-back" onclick="closeProd()">← Back to catalog</button><button class="pm-x" onclick="closeProd()" title="Close">×</button></div><div class="pm-body"></div></div></div>
 
 <script>
 // ===== LIVE: Supabase-backed =====
@@ -391,7 +414,7 @@ function planBoxes(batch){
 /* ---------- state ---------- */
 let LINES=[];
 const LINE_LABEL={learning:'Learning',faith:'Faith',humanbody:'Human Body',founding:'Civics',animals:'Animals',babyfoods:'Baby Foods',helpers:'Community Helpers',calmingcorner:'Calming Corner',safetycorner:'Safety Corner',wifi:'WiFi / Guest',maps:'Maps',presidents:'Presidents',laundry:'Laundry',feedingstation:'Feeding Station'};
-let STATE={ view:'catalog', catLine:'', catQ:'', prod:null, batch:[], boxes:[], activeBox:null, packStep:0, register:[], boxQ:'' };
+let STATE={ view:'catalog', catLine:'', catQ:'', prod:null, batch:[], boxes:[], activeBox:null, packStep:0, register:[], boxQ:'', pickBox:null, pickQ:'' };
 
 /* ---------- helpers ---------- */
 const esc=s=>(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -536,8 +559,9 @@ function viewPacker(){
       .sort((a,b)=>(a.title||a.sku).localeCompare(b.title||b.sku))
       .map(r=>`<option value="${esc(r.sku)}">${esc(shortName(r))} · ${r.size} · ${esc(r.sku)}</option>`).join('');
     const emptyAddPanel=`<div class="addrow">
-      <span class="addlbl">＋ Add an item from the list into Box ${ab.box_no}</span>
-      <select id="addSku"><option value="">— pick a product —</option>${addOpts0}</select>
+      <span class="addlbl">＋ Add an item into Box ${ab.box_no}</span>
+      <button class="btn sm gold" onclick="openPicker(${ab.box_no})">🖼 Add by picture</button>
+      <select id="addSku"><option value="">— or pick by name —</option>${addOpts0}</select>
       <input id="addQty" type="number" min="1" value="1" title="quantity">
       <button class="btn sm" onclick="addItemToBox(${ab.box_no})">Add to box</button></div>`;
     if(total===0){
@@ -550,11 +574,12 @@ function viewPacker(){
       .sort((a,b)=>(a.title||a.sku).localeCompare(b.title||b.sku))
       .map(r=>`<option value="${esc(r.sku)}">${esc(shortName(r))} · ${r.size} · ${esc(r.sku)}</option>`).join('');
     const addPanel=`<div class="addrow">
-      <span class="addlbl">＋ Add another item from the list into Box ${ab.box_no}</span>
-      <select id="addSku"><option value="">— pick a product —</option>${addOpts}</select>
+      <span class="addlbl">＋ Add another item into Box ${ab.box_no}</span>
+      <button class="btn sm gold" onclick="openPicker(${ab.box_no})">🖼 Add by picture</button>
+      <select id="addSku"><option value="">— or pick by name —</option>${addOpts}</select>
       <input id="addQty" type="number" min="1" value="1" title="quantity">
       <button class="btn sm" onclick="addItemToBox(${ab.box_no})">Add to box</button>
-      <span class="addhint">use the <b>×</b> on any item above to remove or change its qty</span>
+      <span class="addhint">tap <b>🖼 Add by picture</b> to pick a poster by its image · use <b>✕ Remove from box</b> on any item to take it out</span>
     </div>`;
     body=`<div class="boxbanner">
       <div><div class="bb-no">BOX ${ab.box_no}</div><div class="bb-sub">use a <b>20×14×10</b> carton · ${ab.size} posters</div></div>
@@ -688,17 +713,59 @@ function boxSearch(v){ STATE.boxQ=v; render(); }
 function addItemToBox(n){
   const sel=document.getElementById('addSku'), qi=document.getElementById('addQty');
   if(!sel||!sel.value){toast('Pick a product to add first');return;}
-  const sku=sel.value; let qty=Math.max(1,parseInt(qi&&qi.value,10)||1);
-  const b=STATE.boxes.find(x=>x.box_no===n); if(!b)return;
+  addBySku(n, sel.value, Math.max(1,parseInt(qi&&qi.value,10)||1));
+}
+// core add: resolves the product, auto-fills SKU/ASIN/FNSKU/thumb, writes to Supabase
+function addBySku(n, sku, qty){
+  qty=Math.max(1,parseInt(qty,10)||1);
+  const b=STATE.boxes.find(x=>x.box_no===n); if(!b){toast('Pick a box first');return;}
   const p=byRaw.get(sku); const row=STATE.batch.find(r=>r.sku===sku)||{};
   const size=(p&&p.size)||row.size||b.size; const unit=unitOzFor(sku,size);
   const existing=b.items.find(i=>i.sku===sku);
-  if(existing){ existing.qty+=qty; existing.actual=(existing.actual||0)+qty; sbItem(existing,{qty:existing.qty,actual_qty:existing.actual}); recomputeBox(b); toast('Added '+qty+'× more '+sku+' to Box '+n); render(); return; }
+  if(existing){ existing.qty+=qty; existing.actual=(existing.actual||0)+qty; sbItem(existing,{qty:existing.qty,actual_qty:existing.actual}); recomputeBox(b); STATE.packStep=b.items.indexOf(existing); toast('Added '+qty+'× more → '+shortName(existing)+' (Box '+n+')'); render(); return; }
   const it={sku, title:(p&&p.title)||row.title||sku, asin:(p&&p.asin)||row.asin||'', qty, actual:qty, picked:false, thumb:(p&&p.thumb_url)||row.thumb||'', fnsku:(p&&p.fnsku)||row.fnsku||'', unitOz:unit, label:'none'};
   b.items.push(it); recomputeBox(b);
   if(b._id){ SB.from('box_items').insert({box_id:b._id,product_sku:sku,asin:it.asin||null,title:it.title||null,qty:qty,actual_qty:qty,picked:false,label_status:'none',thumb_url:it.thumb||null,fnsku_path:it.fnsku||null}).select().single().then(({data})=>{if(data)it._id=data.id;}); }
   STATE.packStep=b.items.length-1;
-  toast('Added '+qty+'× '+shortName(it)+' to Box '+n); render();
+  toast('Added '+qty+'× '+shortName(it)+' → Box '+n);
+  render();
+}
+function openPicker(n){ STATE.pickBox=n; STATE.pickQ=''; render(); setTimeout(()=>{const s=document.getElementById('pickSearch');if(s)s.focus();},30); }
+function closePicker(){ STATE.pickBox=null; render(); }
+function pickSearch(v){ STATE.pickQ=v; renderPicker(); }
+function pickAdd(sku){ if(!STATE.pickBox)return; const qi=document.getElementById('pickQty'); const qty=Math.max(1,parseInt(qi&&qi.value,10)||1); addBySku(STATE.pickBox, sku, qty); }
+// render only the grid area on search (keeps the qty field + focus intact)
+function renderPicker(){ const g=document.getElementById('pickGrid'); if(g) g.innerHTML=pickCards(); }
+function pickCards(){
+  const q=(STATE.pickQ||'').toLowerCase().trim();
+  let list=PRODUCTS.slice();
+  if(q) list=list.filter(p=>((p.sku||'')+' '+(p.title||'')+' '+(p.asin||'')).toLowerCase().includes(q));
+  list.sort((a,b)=>(a.title||a.sku).localeCompare(b.title||b.sku));
+  list=list.slice(0,240);
+  if(!list.length) return '<div class="note">No products match that search.</div>';
+  return list.map(p=>{
+    const img=imgFor(p.sku,p.thumb_url);
+    const badges=`${p.asin?'<span class="pk-b ok">ASIN ✓</span>':'<span class="pk-b no">no ASIN</span>'}${p.fnsku||p.fnskuCode?'<span class="pk-b ok">FNSKU ✓</span>':''}<span class="pk-b sz">${p.size}</span>`;
+    return `<div class="pk-card" onclick="pickAdd('${esc(p.sku).replace(/'/g,"\\'")}')" title="Add ${esc(p.sku)}">
+      <div class="pk-im">${img?`<img src="${esc(img)}" loading="lazy" onerror="this.parentNode.textContent='${initials(p.sku)}'">`:initials(p.sku)}</div>
+      <div class="pk-t">${esc((p.title||p.sku)).slice(0,46)}</div>
+      <div class="pk-s"><code>${esc(p.sku)}</code></div>
+      <div class="pk-badges">${badges}</div></div>`;
+  }).join('');
+}
+function viewPickerModal(){
+  if(!STATE.pickBox) return '';
+  return `<div id="pickmodal" class="pmodal on" onclick="if(event.target.id==='pickmodal')closePicker()">
+    <div class="pm-card pick-card">
+      <div class="pm-head">
+        <button class="pm-back" onclick="closePicker()">← Done adding</button>
+        <label class="pick-qty">Qty each <input id="pickQty" type="number" min="1" value="1"></label>
+        <button class="pm-x" onclick="closePicker()" title="Close">×</button>
+      </div>
+      <div class="pick-search"><input id="pickSearch" placeholder="Search posters by name, SKU or ASIN…" value="${esc(STATE.pickQ||'')}" oninput="pickSearch(this.value)"></div>
+      <div class="pm-body"><div class="note" style="margin:0 0 10px">Tap a poster to drop it into <b>Box ${STATE.pickBox}</b> — SKU, ASIN &amp; FNSKU fill in automatically. Keep tapping to add more.</div>
+        <div id="pickGrid" class="pick-grid">${pickCards()}</div></div>
+    </div></div>`;
 }
 function setActual(n,ix,val){ const b=STATE.boxes.find(x=>x.box_no===n); if(!b)return; let v=parseInt(val,10); if(isNaN(v)||v<0)v=0; if(v>b.items[ix].qty)v=b.items[ix].qty; b.items[ix].actual=v; sbItem(b.items[ix],{actual_qty:v}); render(); }
 function togglePick(n,ix){ const b=STATE.boxes.find(x=>x.box_no===n); if(b){const it=b.items[ix];it.picked=!it.picked; sbItem(it,{picked:it.picked}); if(it.picked && ix<b.items.length-1)STATE.packStep=ix+1; render();} }
@@ -813,7 +880,9 @@ async function boot(){
   }catch(e){ toast('Boot error: '+e.message); }
   updateShipChip(); renderNav(); render();
 }
-function render(){ document.getElementById('app').innerHTML =
-  STATE.view==='catalog'?viewCatalog():STATE.view==='intake'?viewIntake():STATE.view==='print'?viewPrint():STATE.view==='boxes'?viewBoxes():STATE.view==='packer'?viewPacker():STATE.view==='register'?viewRegister():viewSettings(); }
+function render(){ const v=
+  STATE.view==='catalog'?viewCatalog():STATE.view==='intake'?viewIntake():STATE.view==='print'?viewPrint():STATE.view==='boxes'?viewBoxes():STATE.view==='packer'?viewPacker():STATE.view==='register'?viewRegister():viewSettings();
+  document.getElementById('app').innerHTML = v + viewPickerModal(); }
+document.addEventListener('keydown',function(e){ if(e.key==='Escape'){ if(STATE.pickBox){closePicker();} else {closeProd();} } });
 boot();
 </script></body></html>
