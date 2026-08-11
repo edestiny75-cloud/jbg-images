@@ -289,7 +289,8 @@ tr.held{opacity:.5}
 .pk-s{font-size:10.5px;color:#8397ab;margin:2px 0 5px}.pk-s code{font-size:10px}
 .pk-badges{display:flex;flex-wrap:wrap;gap:4px;justify-content:center}
 .pk-b{font-size:9.5px;font-weight:800;padding:2px 6px;border-radius:5px}
-.pk-b.ok{background:#12351f;color:var(--mint)}.pk-b.no{background:#3a2323;color:#e08a8a}.pk-b.sz{background:#20242c;color:#aab4c2}
+.pk-b.ok{background:#12351f;color:var(--mint)}.pk-b.no{background:#3a2323;color:#e08a8a}.pk-b.sz{background:#20242c;color:#aab4c2}.pk-b.warn{background:#3a3220;color:var(--gold)}
+.pk-card.pk-dim{opacity:.5}.pk-card.pk-dim:hover{opacity:.7;border-color:var(--gold)}
 .gsheet{font-size:12.5px;font-weight:700;color:#0a7c3f;background:#e3f6ea;padding:6px 12px;border-radius:20px}
 .oc-adjust{display:flex;align-items:center;justify-content:center;gap:8px;font-size:13px;font-weight:600;color:#5b6b7f;margin-bottom:12px}
 .oc-adjust input{width:64px;text-align:center;font-weight:800;font-size:15px}
@@ -425,10 +426,11 @@ const SB_PUB=SB_URL+'/storage/v1/object/public/thumbs/';
 function sideBUrl(sku){ return SB_PUB+encodeURIComponent(sku)+'_B.jpg'; }   // Side B (uploaded)
 function fnUrl(sku){ return SB_PUB+encodeURIComponent(sku)+'_FN.jpg'; }     // FNSKU 30-up sheet (uploaded)
 const PRINTS_PUB=SB_URL+'/storage/v1/object/public/prints/';
-function printPdfUrl(sku){ return PRINTS_PUB+encodeURIComponent(sku)+'.pdf'; }      // real print PDF (uploaded)
-function fnPdfUrl(sku){ return PRINTS_PUB+encodeURIComponent(sku)+'_FN.pdf'; }       // real FNSKU 30-up PDF (uploaded)
-function assetUrl(sku,field){ if(field==='pngB')return sideBUrl(sku); if(field==='fnsku')return fnUrl(sku); return imgFor(sku); }
-/* print poster PDFs (20–90 MB each) can't be web-hosted on the free tier — the real print goes to Fiery via the local agent; this button opens the poster image for on-screen reference. FNSKU label PDFs are tiny and ARE hosted (fnPdfUrl). */
+const GCS_PRINTS='https://storage.googleapis.com/jbg-print-files-2026/';           // all 265 real print PDFs (Google Cloud)
+function printPdfUrl(sku){ return GCS_PRINTS+encodeURIComponent(sku)+'.pdf'; }      // real Fiery print PDF — same file as the Catalog Dashboard
+function fnPdfUrl(sku){ return PRINTS_PUB+encodeURIComponent(sku)+'_FN.pdf'; }       // real FNSKU 30-up PDF (Supabase)
+function assetUrl(sku,field){ if(field==='pngB')return sideBUrl(sku); if(field==='fnsku')return fnUrl(sku); if(field==='pdf'||field==='pdf12x18')return printPdfUrl(sku); return imgFor(sku); }
+/* Print poster PDFs are hosted on Google Cloud Storage (jbg-print-files-2026) — the "Open Print PDF" button opens the exact production file in the browser, same as the Catalog Dashboard. FNSKU label PDFs stay on Supabase (fnPdfUrl). */
 function thumbEl(t,sku){ const s=imgFor(sku,t); if(s) return `<span class="thumb"><img src="${esc(s)}" style="width:100%;height:100%;object-fit:cover" onerror="this.parentNode.textContent='${initials(sku)}'"></span>`; return `<span class="thumb">${initials(sku)}</span>`;}
 function statusChip(s){const m={asin:['#0a5aa8','#dcecfb','by ASIN'],matched:['#1c7c46','#e3f6ea','matched'],aliased:['#1c7c46','#e3f6ea','aliased'],needs_confirm:['#8a6d00','#fff6cf','confirm'],unmapped:['#a12622','#fde2e0','no file yet']};const[c,b,t]=m[s]||['#555','#eee',s];return `<span class="chip" style="color:${c};background:${b}">${t}</span>`;}
 const ALL_SKU_OPTS = PRODUCTS.map(p=>p.sku).sort().map(s=>`<option value="${esc(s)}">`).join('');
@@ -708,26 +710,75 @@ function startNext(){ const b=STATE.boxes.find(x=>x.status==='pending')||STATE.b
 function releaseBox(n){ const b=STATE.boxes.find(x=>x.box_no===n); if(b && b.status==='picking'){ b.status='pending'; sbBox(b,{status:'pending'}); } STATE.activeBox=null; STATE.packStep=0; toast('Box '+n+' released — back in the pool'); render(); }
 function recomputeBox(b){ b.weight_oz=+b.items.reduce((s,i)=>s+i.qty*(i.unitOz||0),0).toFixed(1); b.units=b.items.reduce((s,i)=>s+i.qty,0); sbBox(b,{weight_oz:b.weight_oz,unit_count:b.units}); }
 function editBoxItem(n,ix,v){ const b=STATE.boxes.find(x=>x.box_no===n); if(!b)return; let q=Math.max(0,parseInt(v,10)||0); b.items[ix].qty=q; if(b.items[ix].actual==null||b.items[ix].actual>q)b.items[ix].actual=q; sbItem(b.items[ix],{qty:q,actual_qty:b.items[ix].actual}); recomputeBox(b); render(); }
-function removeBoxItem(n,ix){ const b=STATE.boxes.find(x=>x.box_no===n); if(!b)return; const it=b.items[ix]; if(it._id)SB.from('box_items').delete().eq('id',it._id).then(()=>{}); b.items.splice(ix,1); recomputeBox(b); toast('Removed '+it.sku+' from Box '+n); render(); }
+function removeBoxItem(n,ix){ const b=STATE.boxes.find(x=>x.box_no===n); if(!b)return; const it=b.items[ix]; if(it._id)SB.from('box_items').delete().eq('id',it._id).then(()=>{}); b.items.splice(ix,1); recomputeBox(b);
+  if(isCommitted(b)){ reflowPending(); toast('Removed '+shortName(it)+' from Box '+n+' — its pieces went back to the pool to pack elsewhere'); }
+  else toast('Removed '+shortName(it)+' from Box '+n);
+  render(); }
 function boxSearch(v){ STATE.boxQ=v; render(); }
+/* ---- piece conservation vs Patrick's list ----
+   committed = boxes a packer is on / has finished (picking|packed|shipped); those pieces are locked.
+   free pieces of a SKU = requested on the list − already committed = what still sits in pending boxes. */
+function isCommitted(b){ return b&&(b.status==='picking'||b.status==='packed'||b.status==='shipped'); }
+function requestedBySku(){ const m={}; activeLines(STATE.batch).forEach(l=>{ m[l.sku]=(m[l.sku]||0)+(l.requested||0); }); return m; }
+function committedBySku(){ const m={}; STATE.boxes.forEach(b=>{ if(isCommitted(b)) b.items.forEach(i=>{ m[i.sku]=(m[i.sku]||0)+(i.qty||0); }); }); return m; }
+function freeAvail(sku){ return Math.max(0,(requestedBySku()[sku]||0)-(committedBySku()[sku]||0)); }
+function onList(sku){ return (requestedBySku()[sku]||0)>0; }
+// Rebuild ONLY the pending boxes from what's left after committed boxes; keep committed boxes frozen.
+function reflowPending(){
+  const committed=STATE.boxes.filter(isCommitted);
+  const used=new Set(committed.map(b=>b.box_no));
+  const cbys=committedBySku();
+  const pool=activeLines(STATE.batch)
+    .map(l=>({...l, requested:Math.max(0,(l.requested||0)-(cbys[l.sku]||0))}))
+    .filter(l=>l.requested>0);
+  const fresh=planBoxes(pool);
+  let slot=1; const nextSlot=()=>{ while(used.has(slot))slot++; const s=slot; used.add(s); return s; };
+  fresh.forEach(b=>{ b.box_no=nextSlot(); b.status='pending'; });
+  STATE.boxes=committed.concat(fresh).sort((a,b)=>a.box_no-b.box_no);
+  if(CURRENT_BATCH&&CURRENT_BATCH.id) persistPending(CURRENT_BATCH.id);
+}
+async function persistPending(batchId){
+  await SB.from('boxes').delete().eq('batch_id',batchId).eq('status','pending');
+  for(const bx of STATE.boxes.filter(b=>b.status==='pending')){
+    const {data:box,error}=await SB.from('boxes').insert({batch_id:batchId,box_no:bx.box_no,size:bx.size,weight_oz:bx.weight_oz,unit_count:bx.units,status:'pending'}).select().single();
+    if(error||!box)continue; bx._id=box.id;
+    const its=bx.items.map(i=>({box_id:box.id,product_sku:i.sku,asin:i.asin||null,title:i.title||null,qty:i.qty,actual_qty:i.actual,picked:!!i.picked,label_status:(i.label&&i.label!=='none')?i.label:'none',thumb_url:i.thumb||null,fnsku_path:i.fnsku||null}));
+    const {data:ins}=await SB.from('box_items').insert(its).select();
+    if(ins)ins.forEach((row,k)=>{ if(bx.items[k])bx.items[k]._id=row.id; });
+  }
+}
 function addItemToBox(n){
   const sel=document.getElementById('addSku'), qi=document.getElementById('addQty');
   if(!sel||!sel.value){toast('Pick a product to add first');return;}
   addBySku(n, sel.value, Math.max(1,parseInt(qi&&qi.value,10)||1));
 }
-// core add: resolves the product, auto-fills SKU/ASIN/FNSKU/thumb, writes to Supabase
+// core add: pulls FREE pieces (within Patrick's list) into this box; auto-fills SKU/ASIN/FNSKU/thumb.
 function addBySku(n, sku, qty){
   qty=Math.max(1,parseInt(qty,10)||1);
   const b=STATE.boxes.find(x=>x.box_no===n); if(!b){toast('Pick a box first');return;}
-  const p=byRaw.get(sku); const row=STATE.batch.find(r=>r.sku===sku)||{};
+  const p=byRaw.get(sku); const nm=shortName({sku,title:(p&&p.title)||sku});
+  const avail=freeAvail(sku);
+  if(avail<=0){
+    toast(onList(sku)
+      ? ('All the '+nm+' on Patrick’s list are already in boxes being packed. To ship MORE, raise its qty on the Intake dashboard.')
+      : (nm+' isn’t on Patrick’s list — add it on the Intake dashboard to ship it.'));
+    return;
+  }
+  const allowed=Math.min(qty,avail);
+  const row=STATE.batch.find(r=>r.sku===sku)||{};
   const size=(p&&p.size)||row.size||b.size; const unit=unitOzFor(sku,size);
   const existing=b.items.find(i=>i.sku===sku);
-  if(existing){ existing.qty+=qty; existing.actual=(existing.actual||0)+qty; sbItem(existing,{qty:existing.qty,actual_qty:existing.actual}); recomputeBox(b); STATE.packStep=b.items.indexOf(existing); toast('Added '+qty+'× more → '+shortName(existing)+' (Box '+n+')'); render(); return; }
-  const it={sku, title:(p&&p.title)||row.title||sku, asin:(p&&p.asin)||row.asin||'', qty, actual:qty, picked:false, thumb:(p&&p.thumb_url)||row.thumb||'', fnsku:(p&&p.fnsku)||row.fnsku||'', unitOz:unit, label:'none'};
-  b.items.push(it); recomputeBox(b);
-  if(b._id){ SB.from('box_items').insert({box_id:b._id,product_sku:sku,asin:it.asin||null,title:it.title||null,qty:qty,actual_qty:qty,picked:false,label_status:'none',thumb_url:it.thumb||null,fnsku_path:it.fnsku||null}).select().single().then(({data})=>{if(data)it._id=data.id;}); }
-  STATE.packStep=b.items.length-1;
-  toast('Added '+qty+'× '+shortName(it)+' → Box '+n);
+  if(existing){ existing.qty+=allowed; existing.actual=(existing.actual||0)+allowed; sbItem(existing,{qty:existing.qty,actual_qty:existing.actual}); recomputeBox(b); STATE.packStep=b.items.indexOf(existing); }
+  else{
+    const it={sku, title:(p&&p.title)||row.title||sku, asin:(p&&p.asin)||row.asin||'', qty:allowed, actual:allowed, picked:false, thumb:(p&&p.thumb_url)||row.thumb||'', fnsku:(p&&p.fnsku)||row.fnsku||'', unitOz:unit, label:'none'};
+    b.items.push(it); recomputeBox(b);
+    if(b._id){ SB.from('box_items').insert({box_id:b._id,product_sku:sku,asin:it.asin||null,title:it.title||null,qty:allowed,actual_qty:allowed,picked:false,label_status:'none',thumb_url:it.thumb||null,fnsku_path:it.fnsku||null}).select().single().then(({data})=>{if(data)it._id=data.id;}); }
+    STATE.packStep=b.items.length-1;
+  }
+  reflowPending();   // the pulled pieces leave the pending pool; not-worked boxes reshuffle
+  toast(allowed<qty
+    ? ('Added '+allowed+'× '+nm+' (all that was free) → Box '+n+'. '+(qty-allowed)+' more would exceed Patrick’s list — raise it on Intake.')
+    : ('Added '+allowed+'× '+nm+' → Box '+n));
   render();
 }
 function openPicker(n){ STATE.pickBox=n; STATE.pickQ=''; render(); setTimeout(()=>{const s=document.getElementById('pickSearch');if(s)s.focus();},30); }
@@ -743,14 +794,20 @@ function pickCards(){
   list.sort((a,b)=>(a.title||a.sku).localeCompare(b.title||b.sku));
   list=list.slice(0,240);
   if(!list.length) return '<div class="note">No products match that search.</div>';
+  const req=requestedBySku(), com=committedBySku();
   return list.map(p=>{
     const img=imgFor(p.sku,p.thumb_url);
-    const badges=`${p.asin?'<span class="pk-b ok">ASIN ✓</span>':'<span class="pk-b no">no ASIN</span>'}${p.fnsku||p.fnskuCode?'<span class="pk-b ok">FNSKU ✓</span>':''}<span class="pk-b sz">${p.size}</span>`;
-    return `<div class="pk-card" onclick="pickAdd('${esc(p.sku).replace(/'/g,"\\'")}')" title="Add ${esc(p.sku)}">
+    const listed=(req[p.sku]||0)>0, free=Math.max(0,(req[p.sku]||0)-(com[p.sku]||0));
+    const avail = !listed ? '<span class="pk-b no">not on list</span>'
+                 : free>0 ? '<span class="pk-b ok">'+free+' free</span>'
+                          : '<span class="pk-b warn">0 — Intake</span>';
+    const fnb = (p.fnsku||p.fnskuCode)?'<span class="pk-b sz">FNSKU ✓</span>':'';
+    const dim = (listed&&free>0)?'':' pk-dim';
+    return `<div class="pk-card${dim}" onclick="pickAdd('${esc(p.sku).replace(/'/g,"\\'")}')" title="${listed?(free>0?'Add '+esc(p.sku):'No free pieces — use Intake'):'Not on the list — use Intake'}">
       <div class="pk-im">${img?`<img src="${esc(img)}" loading="lazy" onerror="this.parentNode.textContent='${initials(p.sku)}'">`:initials(p.sku)}</div>
       <div class="pk-t">${esc((p.title||p.sku)).slice(0,46)}</div>
       <div class="pk-s"><code>${esc(p.sku)}</code></div>
-      <div class="pk-badges">${badges}</div></div>`;
+      <div class="pk-badges">${avail}<span class="pk-b sz">${p.size}</span>${fnb}</div></div>`;
   }).join('');
 }
 function viewPickerModal(){
@@ -763,7 +820,7 @@ function viewPickerModal(){
         <button class="pm-x" onclick="closePicker()" title="Close">×</button>
       </div>
       <div class="pick-search"><input id="pickSearch" placeholder="Search posters by name, SKU or ASIN…" value="${esc(STATE.pickQ||'')}" oninput="pickSearch(this.value)"></div>
-      <div class="pm-body"><div class="note" style="margin:0 0 10px">Tap a poster to drop it into <b>Box ${STATE.pickBox}</b> — SKU, ASIN &amp; FNSKU fill in automatically. Keep tapping to add more.</div>
+      <div class="pm-body"><div class="note" style="margin:0 0 10px">Tap a poster to drop it into <b>Box ${STATE.pickBox}</b> — SKU, ASIN &amp; FNSKU fill in automatically. The green <b>“N free”</b> badge is how many are still un-packed and can be pulled; <b>0 — Intake</b> or <b>not on list</b> means raise it on the Intake dashboard to ship more.</div>
         <div id="pickGrid" class="pick-grid">${pickCards()}</div></div>
     </div></div>`;
 }
