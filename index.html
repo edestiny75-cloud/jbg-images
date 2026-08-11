@@ -221,6 +221,15 @@ tr.held{opacity:.5}
 .filecell code{font-size:11px;color:#b7c1cd}
 .side-note{font-size:10.5px;color:#7fb2e8;margin-top:3px;font-weight:700}
 .bstrip{background:#122a44;color:#bfe0ff;border-radius:9px;padding:8px 12px;font-size:12.5px;margin-bottom:12px;font-weight:600}
+.dstats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
+.dstats .ds{background:#0f1115;border:1px solid #23262e;border-radius:10px;padding:9px 11px;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.dstats .ds-l{font-size:11px;font-weight:700;color:#8397ab;line-height:1.25}
+.dstats .ds-l small{display:block;font-size:9.5px;font-weight:600;color:#5f6b7a;margin-top:1px}
+.dstats .ds-v{font-size:15px;font-weight:800;color:var(--ink);white-space:nowrap;text-align:right}
+.dstats .ds-v span{font-size:10px;font-weight:700;color:#8397ab;display:block}
+.dstats .ds.hi{background:#12351f;border-color:var(--mint-d);grid-column:1 / -1}
+.dstats .ds.hi .ds-l{color:#8fe3b8}.dstats .ds.hi .ds-l small{color:#6fbf95}
+.dstats .ds.hi .ds-v{color:var(--mint)}.dstats .ds.hi .ds-v span{color:#6fbf95}
 .bstrip code{background:#0f1115;color:#8fc7ff}
 .bstrip.bad{background:#3a1a18;color:#ff8f8a}
 .emptybox{background:var(--panel);border:1px dashed #333a45;border-radius:16px;padding:40px 20px;text-align:center;margin-top:10px}
@@ -675,10 +684,27 @@ function detailBody(sku,opts){
   const fnskuBtn=hasFn?`<a class="btn gold sm" href="${esc(fnPdfUrl(sku))}" target="_blank" rel="noopener">Open FNSKU Sheet → Label Printer</a>`:'';
   const sh=sheetsOf(sku);
   const bstrip = sh>1 ? `<div class="bstrip ${isBundleFile(p.pdf)?'':'bad'}">📦 ${sh}-poster bundle — prints the bundle master ${isBundleFile(p.pdf)?`<code>${esc(fileName(p.pdf))}</code>`:'<b>⚠ no bundle file — add it</b>'}</div>`:'';
+  // ---- weights + proposed case pack (same math as the box planner) ----
+  const shN=(p.sheets_db)||sh;
+  const w=(SETTINGS.weights&&SETTINGS.weights[size])||{sheet:1.8,mailer:6.4,base_in:0.105,per_sheet_in:0.02,columns:1};
+  const itemOz=shN*w.sheet, shipOz=itemOz+w.mailer;
+  const unitTh=w.base_in+shN*w.per_sheet_in;
+  const capTh=(SETTINGS.box_stack_in||10)*(w.columns||1);
+  const casePack=Math.max(1,Math.min(Math.floor((SETTINGS.box_cap_oz||800)/shipOz),Math.floor(capTh/unitTh)));
+  const mailer=size==='11x17'?'13×18 mailer 6.4 oz':'12×9.5 mailer 3.4 oz';
+  const fullLb=(casePack*shipOz/16).toFixed(1);
+  const shipStats=`<div class="dstats">
+    <div class="ds"><div class="ds-l">Item weight</div><div class="ds-v">${itemOz.toFixed(1)} oz</div></div>
+    <div class="ds"><div class="ds-l">Shipping weight<small>poster + ${mailer}</small></div><div class="ds-v">${shipOz.toFixed(1)} oz</div></div>
+    ${shN>1?`<div class="ds"><div class="ds-l">Bundle contents</div><div class="ds-v">${shN} posters · 1 mailer · 1 FNSKU</div></div>`:`<div class="ds"><div class="ds-l">Unit</div><div class="ds-v">1 poster · 1 mailer</div></div>`}
+    <div class="ds hi"><div class="ds-l">Proposed case pack<small>20×14×10 box · 50 lb cap</small></div><div class="ds-v">${casePack} <span>per case</span></div></div>
+    <div class="ds"><div class="ds-l">Full case weight</div><div class="ds-v">${fullLb} lb</div></div>
+  </div>`;
   return `<div class="dhead"><h3>${esc(p.title||sku)}</h3>
     <div class="dmeta">${esc(meta)}${isOld(p)?' <span class="bdg old">⚠ OLD SKU — use updated</span>':''}</div>
     <div class="dkv"><code>${esc(sku)}</code>${p.asin?` &nbsp; <span class="asinlab">ASIN</span> <a class="asin-pill" href="https://www.amazon.com/dp/${esc(p.asin)}" target="_blank">${esc(p.asin)} ↗</a>`:''}</div></div>
     ${bstrip}
+    ${shipStats}
     <div class="dpanels">${panels}</div>
     ${fnskuBlock}
     ${opts.hidePrint?'':`<div class="dactions">${actions}${fnskuBtn}</div>
