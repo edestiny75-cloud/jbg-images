@@ -101,7 +101,7 @@ select,input[type=file],input[type=text],input:not([type]){font-size:13px;paddin
 .pm-back{flex:1;text-align:left;border:0;background:#eef2f6;color:#1c2b3a;font-weight:800;font-size:15px;padding:12px 16px;border-radius:11px;cursor:pointer}
 .pm-back:hover{background:#e2e9ef}
 .pm-x{border:0;background:#eef2f6;width:38px;height:38px;border-radius:50%;font-size:20px;cursor:pointer;color:#41566d;flex:0 0 auto}
-.pm-card{max-width:780px}
+.pm-card{max-width:920px}
 .pm-body{display:block;padding:18px 22px 22px;overflow:auto;-webkit-overflow-scrolling:touch;flex:1 1 auto;min-height:0}
 /* dashboard-style detail (shared by catalog modal + packer click-through) */
 .dhead h3{margin:0 0 4px;font-size:19px}
@@ -110,7 +110,9 @@ select,input[type=file],input[type=text],input:not([type]){font-size:13px;paddin
 .dkv a{color:#0a6ebd;text-decoration:none}.asinlab{font-size:10px;font-weight:800;color:#8397ab}
 .dpanels{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
 .dp-lab{font-size:11px;font-weight:800;letter-spacing:.05em;color:#41566d;margin-bottom:5px}
-.dp-img{background:#e9eef2;border-radius:9px;min-height:220px;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative}
+.dp-img{background:#e9eef2;border-radius:9px;min-height:360px;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative}
+.cat-grouph{font-size:13px;font-weight:800;color:var(--gold);margin:16px 0 8px;letter-spacing:.02em;border-bottom:1px solid #23262e;padding-bottom:6px}
+.cat-grouph span{color:#8397ab;font-weight:700}
 .dp-img img{width:100%;height:100%;object-fit:contain}
 .dp-img .ph-t{display:none;font-weight:800;color:#95a7b6;font-size:15px}
 .dp-img.ph .ph-t{display:block}.dp-img.ph img{display:none}
@@ -424,7 +426,7 @@ function planBoxes(batch){
 /* ---------- state ---------- */
 let LINES=[];
 const LINE_LABEL={learning:'Learning',faith:'Faith',humanbody:'Human Body',founding:'Civics',animals:'Animals',babyfoods:'Baby Foods',helpers:'Community Helpers',calmingcorner:'Calming Corner',safetycorner:'Safety Corner',wifi:'WiFi / Guest',maps:'Maps',presidents:'Presidents',laundry:'Laundry',feedingstation:'Feeding Station'};
-let STATE={ view:'catalog', catLine:'', catQ:'', prod:null, batch:[], boxes:[], activeBox:null, packStep:0, register:[], boxQ:'', pickBox:null, pickQ:'' };
+let STATE={ view:'catalog', catLine:'', catQ:'', prod:null, batch:[], boxes:[], activeBox:null, packStep:0, register:[], boxQ:'', pickBox:null, pickQ:'', pickList:false };
 
 /* ---------- helpers ---------- */
 const esc=s=>(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -457,20 +459,30 @@ function sizeSection(size,rows,cols){
 }
 
 function sizeOfProd(p){return p.size||sizeOf(p.sku,p.meta);}
+function isBinderSku(s){ return /(^|-)BIN(-|$)/i.test(s||''); }   // JBG-BIN-... = binder (8.5x11), else poster
 function viewCatalog(){
   const subtabs=LINES.map(l=>`<button class="${STATE.catLine===l?'on':''}" onclick="catTab('${l}')">${LINE_LABEL[l]||l}</button>`).join('');
   const q=(STATE.catQ||'').toLowerCase();
-  let items=PRODUCTS.filter(p=>p.line===STATE.catLine);
-  if(q) items=PRODUCTS.filter(p=>(p.sku+' '+p.title).toLowerCase().includes(q));
-  const cards=items.map(p=>`<div class="cat-card" onclick="openProduct('${esc(p.sku).replace(/'/g,"\\'")}')">
+  const searching=!!q;
+  let items=searching?PRODUCTS.filter(p=>(p.sku+' '+p.title).toLowerCase().includes(q)):PRODUCTS.filter(p=>p.line===STATE.catLine);
+  const card=p=>`<div class="cat-card" onclick="openProduct('${esc(p.sku).replace(/'/g,"\\'")}')">
     <div class="im">${imgFor(p.sku,p.thumb)?`<img src="${esc(imgFor(p.sku,p.thumb))}" onerror="this.parentNode.textContent='${initials(p.sku)}'">`:initials(p.sku)}</div>
     <div class="bd"><div class="ct">${esc(p.title||p.sku).slice(0,52)}</div>
     <div class="cs"><code>${esc(p.sku)}</code></div>
-    ${catBadges(p)}</div></div>`).join('');
+    ${catBadges(p)}</div></div>`;
+  let body;
+  const posters=items.filter(p=>!isBinderSku(p.sku)), binders=items.filter(p=>isBinderSku(p.sku));
+  if(!searching && posters.length && binders.length){
+    // group so posters stay with posters and binders with binders (e.g. Civics)
+    body=`<div class="cat-grouph">🖼 Posters · <span>${posters.length}</span></div><div class="cat-grid">${posters.map(card).join('')}</div>
+      <div class="cat-grouph">📒 Binders · <span>${binders.length}</span></div><div class="cat-grid">${binders.map(card).join('')}</div>`;
+  } else {
+    body=`<div class="cat-grid">${items.map(card).join('')||'<div class="note">No products.</div>'}</div>`;
+  }
   return `<h1>Catalog</h1><p class="sub">Your live catalog — browse any line and <b>manually print</b> any product (set copies → send to Fiery). This is your dashboard, made live; the automatic list flow is the other tabs.</p>
   <div class="subnav">${subtabs}</div>
   <div class="bar"><input placeholder="Search all ${PRODUCTS.length} products…" value="${esc(STATE.catQ)}" oninput="catSearch(this.value)" style="flex:1;min-width:220px"></div>
-  <div class="cat-grid">${cards||'<div class="note">No products.</div>'}</div>`;
+  ${body}`;
 }
 
 function viewIntake(){
@@ -492,12 +504,16 @@ function viewIntake(){
     </tr>`).join('')}</tbody></table>`;
   const heldN=b.filter(x=>x.held).length;
   const sendUnits=activeLines(b).reduce((s,r)=>s+r.requested,0);
-  if(!b.length){ return `<datalist id="allskus">${ALL_SKU_OPTS}</datalist><h1>Weekly List Intake</h1><p class="sub">Upload Patrick's weekly list (.xlsx), or load the sample to try it. Resolved by <b>ASIN first</b>, then SKU.</p>
+  if(!b.length){ return `<datalist id="allskus">${ALL_SKU_OPTS}</datalist><h1>Weekly List Intake</h1><p class="sub">Upload Patrick's weekly list (.xlsx), <b>start a manual order</b> by picking from your catalog, or load the sample. Everything runs the same box-config + packer flow.</p>
     <div class="emptybox"><div class="eb-title">No list loaded</div>
     <div class="bar" style="justify-content:center"><label class="btn">⬆ Upload list (.xlsx) <input type="file" accept=".xlsx,.xls" style="display:none" onchange="onListFile(this)"></label>
-    <button class="btn ghost" onclick="loadSample()">Load sample list</button></div></div>`; }
+    <button class="btn gold" onclick="startManualOrder()">🖼 Start manual order</button>
+    <button class="btn ghost" onclick="loadSample()">Load sample list</button></div>
+    <div class="note" style="margin-top:10px">A <b>manual order</b> lets you build a shipment by tapping products from your catalog and setting quantities — then it plans boxes (11×17 first, case packs, 50 lb cap) and packs exactly like Patrick's list.</div></div>`; }
   return `<datalist id="allskus">${ALL_SKU_OPTS}</datalist><h1>Weekly List Intake</h1><p class="sub">${esc(SHIPMENT.name)} · resolved by <b>ASIN first</b>. <b>Edit any quantity</b> or <b>⏸ hold</b> a line — Print Queue + boxes follow. Then <b>Save &amp; plan</b> to sync.</p>
   <div class="bar"><label class="btn ghost">⬆ Upload <input type="file" accept=".xlsx,.xls" style="display:none" onchange="onListFile(this)"></label>
+  <button class="btn gold sm" onclick="openListPicker()">🖼 Add product</button>
+  <button class="btn ghost sm" onclick="startManualOrder()">＋ New manual order</button>
   <button class="btn ghost sm" onclick="loadSample()">Load sample</button>
   <button class="btn" onclick="saveRun()">💾 Save &amp; plan → sync</button>
   <button class="btn ghost" onclick="go('print')">Print Queue →</button></div>
@@ -808,10 +824,22 @@ function addBySku(n, sku, qty){
     : ('Added '+allowed+'× '+nm+' → Box '+n));
   render();
 }
-function openPicker(n){ STATE.pickBox=n; STATE.pickQ=''; render(); setTimeout(()=>{const s=document.getElementById('pickSearch');if(s)s.focus();},30); }
-function closePicker(){ STATE.pickBox=null; render(); }
+function openPicker(n){ STATE.pickBox=n; STATE.pickList=false; STATE.pickQ=''; render(); setTimeout(()=>{const s=document.getElementById('pickSearch');if(s)s.focus();},30); }
+function openListPicker(){ STATE.pickList=true; STATE.pickBox=null; STATE.pickQ=''; render(); setTimeout(()=>{const s=document.getElementById('pickSearch');if(s)s.focus();},30); }
+function closePicker(){ STATE.pickBox=null; STATE.pickList=false; render(); }
 function pickSearch(v){ STATE.pickQ=v; renderPicker(); }
-function pickAdd(sku){ if(!STATE.pickBox)return; const qi=document.getElementById('pickQty'); const qty=Math.max(1,parseInt(qi&&qi.value,10)||1); addBySku(STATE.pickBox, sku, qty); }
+function pickAdd(sku){ const qi=document.getElementById('pickQty'); const qty=Math.max(1,parseInt(qi&&qi.value,10)||1); STATE.pickQty=qty;
+  if(STATE.pickList) addToManualList(sku,qty); else if(STATE.pickBox) addBySku(STATE.pickBox, sku, qty); }
+// build a manual order line-by-line (same pipeline as an uploaded list)
+function addToManualList(sku,qty){
+  qty=Math.max(1,parseInt(qty,10)||1);
+  const p=byRaw.get(sku)||{};
+  let row=CURRENT_LIST.find(r=>r.sku===sku);
+  if(row){ row.requested=(row.requested||0)+qty; if(EDITS[sku]&&EDITS[sku].qty!=null)EDITS[sku].qty=row.requested; }
+  else CURRENT_LIST.push({sku, asin:p.asin||'', title:p.title||sku, requested:qty, notes:'manual'});
+  STATE.batch=buildBatch(CURRENT_LIST); STATE.boxes=planBoxes(STATE.batch);
+  toast('Added '+qty+'× '+shortName({sku,title:p.title||sku})+' to the order'); render();
+}
 // render only the grid area on search (keeps the qty field + focus intact)
 function renderPicker(){ const g=document.getElementById('pickGrid'); if(g) g.innerHTML=pickCards(); }
 function pickCards(){
@@ -821,6 +849,20 @@ function pickCards(){
   list.sort((a,b)=>(a.title||a.sku).localeCompare(b.title||b.sku));
   list=list.slice(0,240);
   if(!list.length) return '<div class="note">No products match that search.</div>';
+  // LIST mode (manual order): every product is addable, show how many are already on the order
+  if(STATE.pickList){
+    const onOrder={}; CURRENT_LIST.forEach(r=>{onOrder[r.sku]=(onOrder[r.sku]||0)+(r.requested||0);});
+    return list.map(p=>{
+      const img=imgFor(p.sku,p.thumb_url); const n=onOrder[p.sku]||0;
+      const fnb=(p.fnsku||p.fnskuCode)?'<span class="pk-b sz">FNSKU ✓</span>':'';
+      return `<div class="pk-card" onclick="pickAdd('${esc(p.sku).replace(/'/g,"\\'")}')" title="Add ${esc(p.sku)} to the order">
+        <div class="pk-im">${img?`<img src="${esc(img)}" loading="lazy" onerror="this.parentNode.textContent='${initials(p.sku)}'">`:initials(p.sku)}</div>
+        <div class="pk-t">${esc((p.title||p.sku)).slice(0,46)}</div>
+        <div class="pk-s"><code>${esc(p.sku)}</code></div>
+        <div class="pk-badges">${n>0?'<span class="pk-b ok">'+n+' on order</span>':''}<span class="pk-b sz">${p.size}</span>${fnb}</div></div>`;
+    }).join('');
+  }
+  // BOX mode (packer): cap at free pieces vs Patrick's list
   const req=requestedBySku(), com=committedBySku();
   return list.map(p=>{
     const img=imgFor(p.sku,p.thumb_url);
@@ -838,19 +880,24 @@ function pickCards(){
   }).join('');
 }
 function viewPickerModal(){
-  if(!STATE.pickBox) return '';
+  if(!STATE.pickBox && !STATE.pickList) return '';
+  const onOrderN=STATE.pickList?CURRENT_LIST.reduce((s,r)=>s+(r.requested||0),0):0;
+  const note=STATE.pickList
+    ? `Tap posters to build your <b>manual order</b> — set <b>Qty each</b> first, then tap. SKU, ASIN &amp; the print file fill in automatically. <b>${onOrderN}</b> unit${onOrderN===1?'':'s'} on the order so far. Close when done, then <b>Save &amp; plan</b>.`
+    : `Tap a poster to drop it into <b>Box ${STATE.pickBox}</b> — SKU, ASIN &amp; FNSKU fill in automatically. The green <b>“N free”</b> badge is how many are still un-packed and can be pulled; <b>0 — Intake</b> or <b>not on list</b> means raise it on the Intake dashboard to ship more.`;
   return `<div id="pickmodal" class="pmodal on" onclick="if(event.target.id==='pickmodal')closePicker()">
     <div class="pm-card pick-card">
       <div class="pm-head">
         <button class="pm-back" onclick="closePicker()">← Done adding</button>
-        <label class="pick-qty">Qty each <input id="pickQty" type="number" min="1" value="1"></label>
+        <label class="pick-qty">Qty each <input id="pickQty" type="number" min="1" value="${STATE.pickQty||1}"></label>
         <button class="pm-x" onclick="closePicker()" title="Close">×</button>
       </div>
       <div class="pick-search"><input id="pickSearch" placeholder="Search posters by name, SKU or ASIN…" value="${esc(STATE.pickQ||'')}" oninput="pickSearch(this.value)"></div>
-      <div class="pm-body"><div class="note" style="margin:0 0 10px">Tap a poster to drop it into <b>Box ${STATE.pickBox}</b> — SKU, ASIN &amp; FNSKU fill in automatically. The green <b>“N free”</b> badge is how many are still un-packed and can be pulled; <b>0 — Intake</b> or <b>not on list</b> means raise it on the Intake dashboard to ship more.</div>
+      <div class="pm-body"><div class="note" style="margin:0 0 10px">${note}</div>
         <div id="pickGrid" class="pick-grid">${pickCards()}</div></div>
     </div></div>`;
 }
+function startManualOrder(){ CURRENT_LIST=[]; EDITS={}; CURRENT_BATCH=null; STATE._srcName='Manual order'; SHIPMENT={no:'(unsaved)',name:'Manual order'}; STATE.batch=[]; STATE.boxes=[]; STATE.view='intake'; updateShipChip(); openListPicker(); }
 function setActual(n,ix,val){ const b=STATE.boxes.find(x=>x.box_no===n); if(!b)return; let v=parseInt(val,10); if(isNaN(v)||v<0)v=0; if(v>b.items[ix].qty)v=b.items[ix].qty; b.items[ix].actual=v; sbItem(b.items[ix],{actual_qty:v}); render(); }
 function togglePick(n,ix){ const b=STATE.boxes.find(x=>x.box_no===n); if(b){const it=b.items[ix];it.picked=!it.picked; sbItem(it,{picked:it.picked}); if(it.picked && ix<b.items.length-1)STATE.packStep=ix+1; render();} }
 function packBox(n){ const b=STATE.boxes.find(x=>x.box_no===n); if(!b)return;
