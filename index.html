@@ -16,6 +16,7 @@ nav button.on{background:var(--mint);color:#08351f}
 nav button:hover:not(.on){background:#26374f;color:#fff}
 .demo-tag{margin-left:auto;font-size:11px;background:#26374f;padding:4px 10px;border-radius:20px;color:#9fb3c8}
 main{max-width:1120px;margin:0 auto;padding:22px 18px 70px}
+body.wide main{max-width:98vw}
 h1{font-size:22px;margin:0 0 3px}.sub{color:#5b6b7f;margin:0 0 20px;font-size:13.5px}
 .bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
 .btn{background:var(--mint-d);color:#fff;border:0;padding:9px 16px;border-radius:9px;font-size:14px;font-weight:700;cursor:pointer}
@@ -165,7 +166,7 @@ input::placeholder{color:#6b7686}
 .onecard{box-shadow:0 6px 26px rgba(0,0,0,.55)}
 .oc-pick,.pm-print{background:#10201a;border-color:#245139}
 .dp-lab,.dkv{color:#b7c1cd}.dmeta{background:#20242c;color:#c3ccd7}
-.dfnsku{background:#221d0c;border-color:#4a3d14}.dfnsku-h{color:#e6c072}.dfnsku-code{color:#fff}.dfnsku-note{color:#c9b98a}
+.dfnsku{background:#16181e;border-color:#2a2e37}.dfnsku-h{color:#e6b34d}.dfnsku-code{color:#fff}.dfnsku-note{color:#9aa7b4}
 .dsteps{background:#12141a;color:#b7c1cd}
 .pm-x{background:#242832;color:#c3ccd7}
 .pm-head{background:#0b0c0f;border-bottom:1px solid #23262e}
@@ -179,7 +180,7 @@ input::placeholder{color:#6b7686}
 .oc-lbls button.done,.pk-card .lbls button.done{background:#12351f;border-color:var(--mint);color:var(--mint)}
 .dot{background:#333a45}.dot.pk{background:var(--mint)}
 #toast{background:#000;border:1px solid #2a2e37}
-.callout{background:#221d0c;border-color:#4a3d14;color:#e8d9a8}
+.callout{background:#16181e;border-color:#2a2e37;color:#cfd8e2}
 .pm-print b,.oc-check,.mprow label,.pk-check{color:var(--mint)}
 .warn{color:#ff8f8a}.asin a,.dkv a,.pm-kv a{color:#6db8ff}
 ::-webkit-scrollbar{width:12px;height:12px}::-webkit-scrollbar-thumb{background:#2a2e37;border-radius:8px}::-webkit-scrollbar-track{background:#0b0c0f}
@@ -230,9 +231,9 @@ tr.held{opacity:.5}
 .dstats .ds-l small{display:block;font-size:9.5px;font-weight:600;color:#5f6b7a;margin-top:1px}
 .dstats .ds-v{font-size:15px;font-weight:800;color:var(--ink);white-space:nowrap;text-align:right}
 .dstats .ds-v span{font-size:10px;font-weight:700;color:#8397ab;display:block}
-.dstats .ds.hi{background:#12351f;border-color:var(--mint-d);grid-column:1 / -1}
-.dstats .ds.hi .ds-l{color:#8fe3b8}.dstats .ds.hi .ds-l small{color:#6fbf95}
-.dstats .ds.hi .ds-v{color:var(--mint)}.dstats .ds.hi .ds-v span{color:#6fbf95}
+.dstats .ds.hi{background:linear-gradient(180deg,#2b7ad6,#245fa8);border-color:#5b9de8;grid-column:1 / -1}
+.dstats .ds.hi .ds-l{color:#eaf3ff}.dstats .ds.hi .ds-l small{color:#c9def8}
+.dstats .ds.hi .ds-v{color:#fff}.dstats .ds.hi .ds-v span{color:#d3e6fb}
 .bstrip code{background:#0f1115;color:#8fc7ff}
 .bstrip.bad{background:#3a1a18;color:#ff8f8a}
 .emptybox{background:var(--panel);border:1px dashed #333a45;border-radius:16px;padding:40px 20px;text-align:center;margin-top:10px}
@@ -317,7 +318,7 @@ tr.held{opacity:.5}
 .shipbanner b{font-size:18px}.shipmeta{font-size:12.5px;color:#5b6b7f}
 /* ===== Front gate: black splash (login removed for now) ===== */
 #gate{position:fixed;inset:0;z-index:9999;background:#000000;display:flex;align-items:center;justify-content:center;overflow:hidden}
-#gate.hide{opacity:0;pointer-events:none;transition:opacity .7s ease}
+#gate.hide{opacity:0;visibility:hidden;pointer-events:none;transition:opacity .3s ease}
 #gate::before{content:"";position:absolute;inset:0;background:radial-gradient(900px 520px at 50% 34%,rgba(126,202,166,.16) 0,rgba(0,0,0,0) 62%);pointer-events:none}
 .gate-stage{position:relative;width:100%;max-width:640px;padding:0 26px;text-align:center;transition:opacity .5s ease}
 .gate-stage.off{display:none}
@@ -418,6 +419,64 @@ table.wsheet .wt-chk.on{color:#08110c;background:var(--mint)!important}
 table.wsheet .wt-chk:hover{background:#e3f2ea}
 table.wsheet .wt-chkh{cursor:pointer;text-align:center;color:#1c7c46;user-select:none}
 table.wsheet tbody tr.wt-selrow td{background:#eafaf2}   /* faint tint on checked rows; green ✓ marks it */
+.wt-money .wt-u{color:#6b7280;margin-left:3px;font-size:11px}
+table.wsheet .wt-cp{text-align:center;font-weight:700;color:#0b3d20;background:#eef7f1}
+table.wsheet .wt-dim{white-space:nowrap;color:#374151;font-size:12px}
+table.wsheet .wt-imgcell{cursor:pointer}
+table.wsheet .wt-imgcell:hover{background:#e8f2ff}
+table.wsheet .wt-link{cursor:pointer;color:#0b57c2;text-decoration:none}
+table.wsheet .wt-link:hover{text-decoration:underline}
+/* product-detail pricing block */
+.pm-pricing{border-top:1px solid var(--line);margin-top:16px;padding-top:14px}
+.pm-pricing>b{font-size:15px;color:var(--ink)}
+.pm-pricing .pp-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-top:12px}
+.pm-pricing label{display:flex;flex-direction:column;font-size:12px;font-weight:800;color:var(--muted)}
+.pm-pricing label small{font-weight:500;color:#8b93a0;margin:2px 0 5px;font-size:10.5px}
+.pm-pricing label span{display:flex;align-items:center;gap:4px;font-weight:700;color:var(--ink)}
+.pm-pricing input{width:100%;box-sizing:border-box;background:var(--panel2);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:9px 10px;font-size:15px;font-weight:700}
+.pm-pricing input:focus{border-color:var(--mint);outline:none}
+.pm-pricing .pp-map input{border-color:#e03b3b;background:var(--panel2)}
+.pm-pricing .pp-cp{background:#12351f;color:var(--mint);border-radius:8px;padding:9px 10px;font-weight:800;font-size:14px}
+.pm-pricing .pp-u{color:var(--muted);font-weight:700}
+.pm-pricing .pp-note{margin-top:12px;font-size:12px;color:var(--muted)}
+/* JBG logo-color buttons — solid, sharp, white text */
+.jbtn{border:0;border-radius:6px;padding:9px 16px;font-size:13px;font-weight:800;color:#fff;cursor:pointer;letter-spacing:.01em;box-shadow:0 2px 5px rgba(0,0,0,.28);transition:filter .12s,transform .06s;white-space:nowrap}
+.jbtn:hover{filter:brightness(1.09)}
+.jbtn:active{transform:translateY(1px)}
+.jbtn:disabled{opacity:.4;cursor:default;box-shadow:none}
+.jbtn span{color:#fff}
+.jbtn-green{background:#159a58}
+.jbtn-blue{background:#2b7ad6}
+.jbtn-purple{background:#7a49c0}
+.jbtn-orange{background:#f0821e}
+.jbtn-red{background:#e03b3b}
+.jbtn-gold{background:#d29400}
+.jbtn-teal{background:#159e93}
+/* App-wide FUN JBG buttons — each button in a row a different vivid logo color, playful pop on hover */
+.btn{border-radius:9px!important;font-weight:800!important;color:#fff!important;border:0!important;box-shadow:0 3px 8px rgba(0,0,0,.30)!important;transition:transform .11s ease,filter .12s,box-shadow .12s}
+.btn:hover{filter:brightness(1.08);transform:translateY(-2px);box-shadow:0 7px 16px rgba(0,0,0,.34)!important}
+.btn:active{transform:translateY(0)}
+.btn:nth-of-type(7n+1){background:#2b7ad6!important}   /* blue */
+.btn:nth-of-type(7n+2){background:#e84c8a!important}   /* pink */
+.btn:nth-of-type(7n+3){background:#f0821e!important}   /* orange */
+.btn:nth-of-type(7n+4){background:#7a49c0!important}   /* purple */
+.btn:nth-of-type(7n+5){background:#159a58!important}   /* green */
+.btn:nth-of-type(7n+6){background:#d29400!important}   /* gold */
+.btn:nth-of-type(7n+7){background:#159e93!important}   /* teal */
+.btn.ghost{color:#fff!important;border:0!important}
+.btn.big{background:#159a58!important}                 /* keep the big "go" action green */
+/* Top nav tabs — each a JBG logo color, active tab ringed */
+nav button{color:#fff!important;font-weight:800!important}
+nav button:nth-of-type(8n+1){background:#2b7ad6!important}
+nav button:nth-of-type(8n+2){background:#e84c8a!important}
+nav button:nth-of-type(8n+3){background:#f0821e!important}
+nav button:nth-of-type(8n+4){background:#7a49c0!important}
+nav button:nth-of-type(8n+5){background:#159a58!important}
+nav button:nth-of-type(8n+6){background:#d29400!important}
+nav button:nth-of-type(8n+7){background:#159e93!important}
+nav button:nth-of-type(8n+8){background:#e03b3b!important}
+nav button:hover{filter:brightness(1.12)}
+nav button.on{outline:2.5px solid #fff;outline-offset:-2px;filter:brightness(1.14)}
 .wfilter{display:flex;align-items:center;gap:5px;font-size:12px;font-weight:800;color:var(--muted);white-space:nowrap}
 .wfilter select{background:var(--panel2);border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:8px 9px;font-size:13px;font-weight:700;max-width:150px}
 </style></head>
@@ -545,6 +604,25 @@ function setCost(sku,v){ v=(''+v).replace(/[^0-9.]/g,''); if(v==='')delete COST[
 let COSTB={}; try{ COSTB=JSON.parse(localStorage.getItem('jbg_cost_bulk')||'{}')||{}; }catch(e){ COSTB={}; }
 function getCostBulk(sku){ const v=COSTB[sku]; return (v==null||v==='')?'':(+v); }
 function setCostBulk(sku,v){ v=(''+v).replace(/[^0-9.]/g,''); if(v==='')delete COSTB[sku]; else COSTB[sku]=v; try{ localStorage.setItem('jbg_cost_bulk',JSON.stringify(COSTB)); }catch(e){} }
+let MSRP={}; try{ MSRP=JSON.parse(localStorage.getItem('jbg_msrp')||'{}')||{}; }catch(e){ MSRP={}; }
+function getMsrp(sku){ const v=MSRP[sku]; return (v==null||v==='')?'':(+v); }
+function setMsrp(sku,v){ v=(''+v).replace(/[^0-9.]/g,''); if(v==='')delete MSRP[sku]; else MSRP[sku]=v; try{ localStorage.setItem('jbg_msrp',JSON.stringify(MSRP)); }catch(e){} }
+let MAP={}; try{ MAP=JSON.parse(localStorage.getItem('jbg_map')||'{}')||{}; }catch(e){ MAP={}; }
+function getMap(sku){ const v=MAP[sku]; return (v==null||v==='')?'':(+v); }
+function setMap(sku,v){ v=(''+v).replace(/[^0-9.]/g,''); if(v==='')delete MAP[sku]; else MAP[sku]=v; try{ localStorage.setItem('jbg_map',JSON.stringify(MAP)); }catch(e){} }
+// Item weight (oz): manual override wins, else computed from the box math. Case pack follows the effective weight.
+let WT={}; try{ WT=JSON.parse(localStorage.getItem('jbg_wt')||'{}')||{}; }catch(e){ WT={}; }
+function wSet(sku){ const p=byRaw.get(sku)||{}; const size=(p.size)||sizeOf(sku); return (SETTINGS.weights&&SETTINGS.weights[size])||{sheet:1.8,mailer:6.4}; }
+function computedItemOz(sku){ const p=byRaw.get(sku)||{}; const sh=(p.sheets_db)||sheetsOf(sku); return sh*wSet(sku).sheet; }   // BARE item weight — poster(s) only, no mailer/envelope
+function getWtManual(sku){ const v=WT[sku]; return (v==null||v==='')?'':(+v); }
+function getItemOz(sku){ const m=getWtManual(sku); return m!==''?m:computedItemOz(sku); }   // the Item Wt column value (bare)
+function setWt(sku,v){ v=(''+v).replace(/[^0-9.]/g,''); if(v==='')delete WT[sku]; else WT[sku]=v; try{ localStorage.setItem('jbg_wt',JSON.stringify(WT)); }catch(e){} }
+// B2C shipping weight (item + envelope) — manual override wins, else item + mailer. Drives the FBA 50 lb case-pack rule.
+let SHIPWT={}; try{ SHIPWT=JSON.parse(localStorage.getItem('jbg_shipwt')||'{}')||{}; }catch(e){ SHIPWT={}; }
+function getShipManual(sku){ const v=SHIPWT[sku]; return (v==null||v==='')?'':(+v); }
+function computedShipOz(sku){ return getItemOz(sku)+(wSet(sku).mailer||0); }
+function getShipOz(sku){ const m=getShipManual(sku); return m!==''?m:computedShipOz(sku); }
+function setShipWt(sku,v){ v=(''+v).replace(/[^0-9.]/g,''); if(v==='')delete SHIPWT[sku]; else SHIPWT[sku]=v; try{ localStorage.setItem('jbg_shipwt',JSON.stringify(SHIPWT)); }catch(e){} }
 // Carton sizes — main is 20×14×10; the smaller ones are for sending samples out.
 const CARTONS=['20×14×10','12×12×8','12×9×4','9×6×4','6×6×6'];
 function buildBatch(list){
@@ -942,11 +1020,14 @@ function renderExportModal(){ const sel=selectedProducts(); const host=document.
 function exportFilename(ext){ const t=(STATE.catQ?'search':(LINE_LABEL[STATE.catLine]||'catalog')); return 'JBG_Wholesale_'+t.replace(/[^A-Za-z0-9]+/g,'_')+'.'+ext; }
 function exportExcel(prods,full){ const sel=prods||selectedProducts(); if(!sel.length){toast('Nothing selected');return;}
   const rows=sel.map(p=>{ const base={'Item Name':p.title||p.sku,'SKU':p.sku};
-    if(full){ base['FNSKU']=p.fnskuCode||''; base['ASIN']=p.asin||''; base['Size']=p.size||''; base['Theme']=LINE_LABEL[p.line]||p.line||''; base['Cost']=getCost(p.sku)===''?'':Number(getCost(p.sku)); }
-    base['Wholesale Price']=getWPrice(p.sku)===''?'':Number(getWPrice(p.sku)); base['Image URL']=imgFor(p.sku,p.thumb_url)||''; return base; });
-  const header=full?['Item Name','SKU','FNSKU','ASIN','Size','Theme','Cost','Wholesale Price','Image URL']:['Item Name','SKU','Wholesale Price','Image URL'];
+    if(full){ base['FNSKU']=p.fnskuCode||''; base['ASIN']=p.asin||''; base['Size']=p.size||''; base['Theme']=LINE_LABEL[p.line]||p.line||'';
+      base['Cost Indiv']=getCost(p.sku)===''?'':Number(getCost(p.sku)); base['Cost Bulk']=getCostBulk(p.sku)===''?'':Number(getCostBulk(p.sku)); }
+    base['Wholesale Price']=getWPrice(p.sku)===''?'':Number(getWPrice(p.sku));
+    if(full){ base['MSRP']=getMsrp(p.sku)===''?'':Number(getMsrp(p.sku)); base['Item Wt (oz)']=+getItemOz(p.sku).toFixed(1); base['B2C Ship Wt (oz)']=+getShipOz(p.sku).toFixed(1); base['Case Pack']=casePackFor(p.sku); base['Case Dims']='20x14x10'; }
+    base['Image URL']=imgFor(p.sku,p.thumb_url)||''; return base; });
+  const header=full?['Item Name','SKU','FNSKU','ASIN','Size','Theme','Cost Indiv','Cost Bulk','Wholesale Price','MSRP','Item Wt (oz)','B2C Ship Wt (oz)','Case Pack','Case Dims','Image URL']:['Item Name','SKU','Wholesale Price','Image URL'];
   const ws=XLSX.utils.json_to_sheet(rows,{header});
-  ws['!cols']=full?[{wch:40},{wch:26},{wch:16},{wch:12},{wch:8},{wch:16},{wch:10},{wch:14},{wch:56}]:[{wch:42},{wch:26},{wch:16},{wch:60}];
+  ws['!cols']=full?[{wch:40},{wch:26},{wch:14},{wch:12},{wch:8},{wch:15},{wch:10},{wch:10},{wch:13},{wch:10},{wch:11},{wch:14},{wch:10},{wch:11},{wch:52}]:[{wch:42},{wch:26},{wch:16},{wch:60}];
   const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Wholesale'); XLSX.writeFile(wb,exportFilename('xlsx'));
   toast('Excel exported ('+sel.length+' items)');
 }
@@ -994,6 +1075,7 @@ function wholeSearch(v){ STATE.wholeQ=v; STATE.wholePage=0; refreshWhole(); }
 function wholeFilterTheme(v){ STATE.wholeTheme=v; STATE.wholePage=0; render(); }
 function wholeFilterSize(v){ STATE.wholeSize=v; STATE.wholePage=0; render(); }
 function wholeClearFilters(){ STATE.wholeTheme=''; STATE.wholeSize=''; STATE.wholeQ=''; STATE.wholePage=0; render(); }
+function wholeRecalc(sku){ const el=document.getElementById('cp_'+sku.replace(/[^A-Za-z0-9]/g,'_')); if(el)el.textContent=casePackFor(sku); }
 function wholeSetPer(n){ STATE.wholePer=n; STATE.wholePage=0; refreshWhole(); }
 function wholeGoPage(i){ STATE.wholePage=Math.max(0,i); refreshWhole(); }
 function wholePageInfo(){ const total=wholeItems().length; const per=STATE.wholePer||50; const pages=Math.max(1,Math.ceil(total/per)); let page=Math.min(STATE.wholePage||0,pages-1); if(page<0)page=0; STATE.wholePage=page; return {total,per,pages,page}; }
@@ -1024,8 +1106,8 @@ function wholeTable(){ const all=wholeItems(); const {per,page}=wholePageInfo();
     return `<tr class="${sel?'wt-selrow':''}">
       <td class="wt-chk ${sel?'on':''}" onclick="wholeToggle('${sk}')" title="Check to include in export">${sel?'✓':''}</td>
       <td class="wt-n">${i+1}</td>
-      <td>${img?`<img class="wt-thumb" src="${esc(img)}" loading="lazy">`:`<span class="wt-noimg">${initials(p.sku)}</span>`}</td>
-      <td class="wt-name">${esc(p.title||p.sku)}</td>
+      <td class="wt-imgcell" onclick="openProduct('${sk}')" title="Open product detail">${img?`<img class="wt-thumb" src="${esc(img)}" loading="lazy">`:`<span class="wt-noimg">${initials(p.sku)}</span>`}</td>
+      <td class="wt-name wt-link" onclick="openProduct('${sk}')" title="Open product detail">${esc(p.title||p.sku)}</td>
       <td><code>${esc(p.sku)}</code></td>
       <td>${esc(p.fnskuCode||'—')}</td>
       <td>${p.asin?`<code>${esc(p.asin)}</code>`:'—'}</td>
@@ -1034,8 +1116,13 @@ function wholeTable(){ const all=wholeItems(); const {per,page}=wholePageInfo();
       <td class="wt-money"><span>$</span><input type="number" min="0" step="0.01" value="${getCost(p.sku)}" placeholder="0.00" title="Cost when shipped individually (in a mailer)" oninput="setCost('${sk}',this.value)"></td>
       <td class="wt-money"><span>$</span><input type="number" min="0" step="0.01" value="${getCostBulk(p.sku)}" placeholder="0.00" title="Cost when shipped bulk (in a box, no individual mailers)" oninput="setCostBulk('${sk}',this.value)"></td>
       <td class="wt-money"><span>$</span><input type="number" min="0" step="0.01" value="${getWPrice(p.sku)}" placeholder="0.00" oninput="setWPrice('${sk}',this.value)"></td>
+      <td class="wt-money"><span>$</span><input type="number" min="0" step="0.01" value="${getMsrp(p.sku)}" placeholder="0.00" title="Manufacturer's suggested retail price" oninput="setMsrp('${sk}',this.value)"></td>
+      <td class="wt-money"><input type="number" min="0" step="0.1" value="${getWtManual(p.sku)}" placeholder="${computedItemOz(p.sku).toFixed(1)}" title="Item weight (oz) — the poster only, no envelope. Blank = auto; type your scale weight to override." oninput="setWt('${sk}',this.value);wholeRecalc('${sk}')"><span class="wt-u">oz</span></td>
+      <td class="wt-money"><input type="number" min="0" step="0.1" value="${getShipManual(p.sku)}" placeholder="${computedShipOz(p.sku).toFixed(1)}" title="B2C shipping weight (oz) — item + envelope, for retail. Blank = item + mailer; type your scale weight to override." oninput="setShipWt('${sk}',this.value);wholeRecalc('${sk}')"><span class="wt-u">oz</span></td>
+      <td class="wt-cp" id="cp_${p.sku.replace(/[^A-Za-z0-9]/g,'_')}">${casePackFor(p.sku)}</td>
+      <td class="wt-dim">20×14×10</td>
     </tr>`; }).join('');
-  return `<table class="wsheet" id="wsheet"><thead><tr><th class="wt-chkh" onclick="wholeToggleAll()" title="Check / uncheck all shown">${allSel?'✓':'▢'}</th><th>#</th><th>Image</th><th>Item Name</th><th>SKU</th><th>FNSKU</th><th>ASIN</th><th>Size</th><th>Theme</th><th>Cost·Indiv<small>mailer</small></th><th>Cost·Bulk<small>box</small></th><th>Wholesale</th></tr></thead><tbody>${rows||'<tr><td colspan="12" class="note">No products.</td></tr>'}</tbody></table>`;
+  return `<table class="wsheet" id="wsheet"><thead><tr><th class="wt-chkh" onclick="wholeToggleAll()" title="Check / uncheck all shown">${allSel?'✓':'▢'}</th><th>#</th><th>Image</th><th>Item Name</th><th>SKU</th><th>FNSKU</th><th>ASIN</th><th>Size</th><th>Theme</th><th>Cost·Indiv<small>mailer</small></th><th>Cost·Bulk<small>box</small></th><th>Wholesale</th><th>MSRP</th><th>Item Wt<small>oz · item only</small></th><th>B2C Ship Wt<small>oz · + envelope</small></th><th>Case Pack<small>50 lb rule</small></th><th>Case Dims<small>inches</small></th></tr></thead><tbody>${rows||'<tr><td colspan="17" class="note">No products.</td></tr>'}</tbody></table>`;
 }
 function viewWholesale(){
   const selN=wholeSelectedItems().length;
@@ -1047,13 +1134,13 @@ function viewWholesale(){
     <input placeholder="🔎 Find by name, SKU, FNSKU, ASIN…" value="${esc(STATE.wholeQ||'')}" oninput="wholeSearch(this.value)" style="flex:1;min-width:180px">
     <label class="wfilter">▾ Theme <select onchange="wholeFilterTheme(this.value)">${themeOpts}</select></label>
     <label class="wfilter">▾ Size <select onchange="wholeFilterSize(this.value)">${sizeOpts}</select></label>
-    ${filtered?`<button class="btn sm ghost" onclick="wholeClearFilters()">✕ Clear filter</button>`:''}
+    ${filtered?`<button class="jbtn jbtn-red" onclick="wholeClearFilters()">✕ Clear filter</button>`:''}
     <span class="ob-spacer"></span>
     <span class="ex-count" id="wholeSelCount">${selN} checked</span>
-    <button class="btn sm ghost" onclick="exportClear()">Uncheck all</button>
-    <button class="btn sm" onclick="exportExcel(wholeExportTarget(),true)">⬇ Excel (<span data-exportcount>${selN||wholeItems().length}</span>)</button>
-    <button class="btn sm ghost" onclick="exportPDF(wholeExportTarget())">PDF (<span data-exportcount>${selN||wholeItems().length}</span>)</button>
-    <button class="btn sm ghost" onclick="exportJPEGof('wsheet','JBG_Wholesale_Sheet.jpg')">JPEG</button>
+    <button class="jbtn jbtn-orange" onclick="exportClear()">Uncheck all</button>
+    <button class="jbtn jbtn-green" onclick="exportExcel(wholeExportTarget(),true)">⬇ Excel (<span data-exportcount>${selN||wholeItems().length}</span>)</button>
+    <button class="jbtn jbtn-blue" onclick="exportPDF(wholeExportTarget())">PDF (<span data-exportcount>${selN||wholeItems().length}</span>)</button>
+    <button class="jbtn jbtn-purple" onclick="exportJPEGof('wsheet','JBG_Wholesale_Sheet.jpg')">JPEG</button>
   </div>
   <div class="wsheet-wrap" id="wholeWrap">${wholeTable()}</div>
   <div id="wholePager">${wholePagerHTML()}</div>`;
@@ -1110,10 +1197,26 @@ function detailBody(sku,opts){
 function openProduct(sku){STATE.prod=byRaw.get(sku)||PRODUCTS.find(p=>p.sku===sku);renderModal();}
 function closeProd(){STATE.prod=null;document.getElementById('pmodal').classList.remove('on');}
 function manualPrint(sku,size){const n=parseInt((document.getElementById('mpCopies')||{}).value||'1',10);const p=byRaw.get(sku)||{};queueFiery(sku,p.pdf||'',size,n);}
+function pricingBlock(sku){ const sk=esc(sku).replace(/'/g,"\\'"); const cpId='mcp_'+sku.replace(/[^A-Za-z0-9]/g,'_');
+  return `<div class="pm-pricing">
+    <b>💲 Wholesale pricing</b>
+    <div class="pp-grid">
+      <label>Cost · Individual<small>mailer</small><span>$<input type="number" min="0" step="0.01" value="${getCost(sku)}" placeholder="0.00" oninput="setCost('${sk}',this.value)"></span></label>
+      <label>Cost · Bulk<small>box</small><span>$<input type="number" min="0" step="0.01" value="${getCostBulk(sku)}" placeholder="0.00" oninput="setCostBulk('${sk}',this.value)"></span></label>
+      <label>Wholesale price<span>$<input type="number" min="0" step="0.01" value="${getWPrice(sku)}" placeholder="0.00" oninput="setWPrice('${sk}',this.value)"></span></label>
+      <label>MSRP<span>$<input type="number" min="0" step="0.01" value="${getMsrp(sku)}" placeholder="0.00" oninput="setMsrp('${sk}',this.value)"></span></label>
+      <label class="pp-map">Min Allowed Price<small>MAP — don't sell below</small><span>$<input type="number" min="0" step="0.01" value="${getMap(sku)}" placeholder="0.00" oninput="setMap('${sk}',this.value)"></span></label>
+      <label>Item weight<small>oz · poster only</small><span><input type="number" min="0" step="0.1" value="${getWtManual(sku)}" placeholder="${computedItemOz(sku).toFixed(1)}" oninput="setWt('${sk}',this.value);var e=document.getElementById('${cpId}');if(e)e.textContent=casePackFor('${sk}')+' per case'"><b class="pp-u">oz</b></span></label>
+      <label>B2C ship weight<small>oz · + envelope</small><span><input type="number" min="0" step="0.1" value="${getShipManual(sku)}" placeholder="${computedShipOz(sku).toFixed(1)}" oninput="setShipWt('${sk}',this.value);var e=document.getElementById('${cpId}');if(e)e.textContent=casePackFor('${sk}')+' per case'"><b class="pp-u">oz</b></span></label>
+      <label>Case pack<small>20×14×10 · 50 lb rule</small><span class="pp-cp" id="${cpId}">${casePackFor(sku)} per case</span></label>
+    </div>
+    <div class="pp-note">Prices save on this device. Per-customer tiers &amp; last cost per customer — coming later.</div>
+  </div>`; }
 function renderModal(){
   const p=STATE.prod;const m=document.getElementById('pmodal');if(!p){m.classList.remove('on');return;}
   const size=sizeOfProd(p);
   m.querySelector('.pm-body').innerHTML=`${detailBody(p.sku)}
+    ${pricingBlock(p.sku)}
     <div class="pm-print">
       <b>Manual print</b>
       <div class="mprow"><label>Copies</label><input id="mpCopies" type="number" min="1" max="999" value="1">
@@ -1235,7 +1338,7 @@ function addToManualList(sku,qty){
 // ---- Box Planner "build a pack": case-pack math, verdict, plan list ----
 function casePackFor(sku){ const p=byRaw.get(sku)||{}; const size=(p.size)||sizeOf(sku); const sh=(p.sheets_db)||sheetsOf(sku);
   const w=(SETTINGS.weights&&SETTINGS.weights[size])||{sheet:1.8,mailer:6.4,base_in:0.105,per_sheet_in:0.02,columns:1};
-  const shipOz=sh*w.sheet+w.mailer; const unitTh=w.base_in+sh*w.per_sheet_in; const capTh=(SETTINGS.box_stack_in||10)*(w.columns||1);
+  const shipOz=getShipOz(sku); const unitTh=w.base_in+sh*w.per_sheet_in; const capTh=(SETTINGS.box_stack_in||10)*(w.columns||1);
   return Math.max(1,Math.min(Math.floor((SETTINGS.box_cap_oz||800)/shipOz),Math.floor(capTh/unitTh))); }
 function packVerdict(sku,qty){ const cp=casePackFor(sku); const cases=Math.floor(qty/cp), left=qty%cp;
   if(cases>=1) return {ok:true, cp, txt:`fills ${cases} full case${cases>1?'s':''}${left?` + ${left} loose`:''}`};
@@ -1519,6 +1622,7 @@ async function boot(){
 }
 function render(){ const v=
   STATE.view==='catalog'?viewCatalog():STATE.view==='wholesale'?viewWholesale():STATE.view==='intake'?viewIntake():STATE.view==='print'?viewPrint():STATE.view==='boxes'?viewBoxes():STATE.view==='packer'?viewPacker():STATE.view==='register'?viewRegister():viewSettings();
+  document.body.classList.toggle('wide', STATE.view==='wholesale');
   document.getElementById('app').innerHTML = v + viewPickerModal(); }
 document.addEventListener('keydown',function(e){ if(e.key==='Escape'){ const xm=document.getElementById('exportmodal'); if(xm&&xm.classList.contains('on')){closeExportModal();return;} const om=document.getElementById('ordermodal'); if(om&&om.classList.contains('on')){closeOrderModal();return;} if(STATE.pickBox||STATE.pickList||STATE.pickPlan){closePicker();} else {closeProd();} } });
 
@@ -1532,7 +1636,7 @@ function playTheme(){ const a=themeReady(); if(!SONG_URL) return false; a.play()
 function toggleTheme(){ const a=document.getElementById('themeAudio'); if(a.paused){a.play().catch(()=>{});} else {a.pause();} syncMusicBtns(); }
 // Song plays while you're on the front page; it stops when you tap Enter.
 function enterApp(){ const a=document.getElementById('themeAudio'); try{a.pause();a.currentTime=0;}catch(e){}
-  const g=document.getElementById('gate'); g.classList.add('hide'); setTimeout(()=>{g.style.display='none';},760); }
+  const g=document.getElementById('gate'); g.classList.add('hide'); setTimeout(()=>{g.style.display='none';},340); }
 // start the theme on the first tap of the front page (browsers block auto-sound until a gesture)
 (function(){ const g=document.getElementById('gate'); if(!g) return;
   g.addEventListener('pointerdown',function(e){ if(e.target.closest('.gate-enter')) return; playTheme(); }); })();
