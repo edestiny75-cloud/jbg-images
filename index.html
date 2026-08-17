@@ -534,6 +534,12 @@ nav button.on{outline:2.5px solid #fff;outline-offset:-2px;filter:brightness(1.1
 .bf-nm code{font-size:11px;color:#9fb0c2}
 .bf-q{font-size:12.5px;font-weight:800;color:var(--mint);white-space:nowrap}
 .bf-none{font-size:12px;color:var(--muted);font-style:italic}
+/* Print Queue bulk-select checkboxes */
+.pq-chk{text-align:center;cursor:pointer;color:#8a94a0;font-weight:900;font-size:15px;width:36px;user-select:none;border-radius:6px}
+.pq-chk.on{color:#08110c;background:var(--mint)}
+.pq-chk:hover{background:rgba(78,207,154,.18)}
+.pq-chkh{cursor:pointer;text-align:center;color:var(--mint);user-select:none;width:36px}
+tr.pq-selrow{background:rgba(78,207,154,.08)}
 </style></head>
 <body>
 <div id="gate">
@@ -753,7 +759,7 @@ function planBoxes(batch){
 /* ---------- state ---------- */
 let LINES=[];
 const LINE_LABEL={learning:'Learning',faith:'Faith',humanbody:'Human Body',founding:'Civics',animals:'Animals',babyfoods:'Baby Foods',helpers:'Community Helpers',calmingcorner:'Calming Corner',safetycorner:'Safety Corner',wifi:'WiFi / Guest',maps:'Maps',presidents:'Presidents',laundry:'Laundry',feedingstation:'Feeding Station'};
-let STATE={ view:'catalog', catLine:'', catQ:'', prod:null, batch:[], boxes:[], activeBox:null, packStep:0, register:[], boxQ:'', pickBox:null, pickQ:'', pickList:false, pickPlan:false, orders:[], _orderKind:'fba', _orderLabels:true, newCarton:'20×14×10', exportMode:false, exportSel:{}, wholePage:0, wholePer:50 };
+let STATE={ view:'catalog', catLine:'', catQ:'', prod:null, batch:[], boxes:[], activeBox:null, packStep:0, register:[], boxQ:'', pickBox:null, pickQ:'', pickList:false, pickPlan:false, orders:[], _orderKind:'fba', _orderLabels:true, newCarton:'20×14×10', exportMode:false, exportSel:{}, wholePage:0, wholePer:50, printSel:{}, quoteCust:'' };
 
 /* ---------- helpers ---------- */
 const esc=s=>(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -879,16 +885,29 @@ function fileName(p){return (p||'').split('/').pop();}
 function viewPrint(){
   const g=grouped(STATE.batch.filter(r=>r.hasPdf));
   g['11x17'].sort(catOrderRow); g['8.5x11'].sort(catOrderRow);   // number order · bundles at end
-  const tbl=rows=>`<table><thead><tr><th>Product</th><th>Qty</th><th>Print file → Fiery</th><th style="text-align:right">Send</th></tr></thead><tbody>${rows.map(r=>`
-    <tr><td><div class="prodcell">${thumbEl(r.thumb,r.sku)}<div class="pcell-txt"><div class="pcell-title">${esc((r.title||r.sku)).slice(0,44)}</div><code>${esc(r.sku)}</code>${r.bundle?`<div class="pcell-badges"><span class="bdg bundle">📦 ${r.sheets}-poster bundle master</span></div>`:''}</div></div></td>
+  const allRows=[...g['11x17'],...g['8.5x11']];
+  const selN=allRows.filter(r=>STATE.printSel[r.sku]).length;
+  const allSel=allRows.length&&allRows.every(r=>STATE.printSel[r.sku]);
+  const tbl=rows=>`<table><thead><tr><th class="pq-chkh" onclick="printSelectAll()">${allSel?'✓':'▢'}</th><th>Product</th><th>Qty</th><th>Print file → Fiery</th><th style="text-align:right">Send</th></tr></thead><tbody>${rows.map(r=>{ const sk=esc(r.sku).replace(/'/g,"\\'"); const sel=!!STATE.printSel[r.sku]; return `
+    <tr class="${sel?'pq-selrow':''}"><td class="pq-chk ${sel?'on':''}" onclick="printToggle('${sk}')" title="Check to send in bulk">${sel?'✓':''}</td>
+    <td><div class="prodcell">${thumbEl(r.thumb,r.sku)}<div class="pcell-txt"><div class="pcell-title">${esc((r.title||r.sku)).slice(0,44)}</div><code>${esc(r.sku)}</code>${r.bundle?`<div class="pcell-badges"><span class="bdg bundle">📦 ${r.sheets}-poster bundle master</span></div>`:''}</div></div></td>
     <td class="q qbig2">${r.requested}</td>
     <td class="filecell" title="${esc(r.pdf)}"><code>${esc(fileName(r.pdf))}</code>${r.size==='11x17'&&/2sided|2-sided|_2sided/i.test(r.pdf)?'<div class="side-note">Side A color · Side B B&amp;W</div>':''}</td>
-    <td style="text-align:right"><button class="btn sm" onclick="queueFiery('${esc(r.sku)}','${esc(r.pdf)}','${r.size}',${r.requested})">Send ${r.requested}× → Fiery</button></td></tr>`).join('')}</tbody></table>`;
-  return `<h1>Print Queue</h1><p class="sub">Follows your <b>edited list</b> — held lines drop out, changed quantities update here. Order: <b>11×17 first, then 8.5×11</b>, biggest runs first. Bundles print their <b>multi-poster master file</b>; maps print the updated 2-sided file (color front / B&amp;W back).</p>
-  <div class="bar"><button class="btn" onclick="sendWholeQueue()">Send whole queue in order</button></div>
+    <td style="text-align:right"><button class="btn sm" onclick="queueFiery('${sk}','${esc(r.pdf)}','${r.size}',${r.requested})">Send ${r.requested}× → Fiery</button></td></tr>`;}).join('')}</tbody></table>`;
+  return `<h1>Print Queue</h1><p class="sub">Follows your <b>edited list</b> — held lines drop out, changed quantities update here. <b>Check the rows</b> you want and send them to the Fiery Hold folder in bulk, or send the whole queue in order.</p>
+  <div class="bar"><button class="btn" onclick="sendWholeQueue()">Send whole queue in order</button>
+    <span class="ex-count">${selN} checked</span>
+    <button class="btn ghost sm" onclick="printClear()">Clear</button>
+    <button class="btn" ${selN?'':'disabled'} onclick="sendCheckedFiery()">🖨 Send checked → Fiery (<span>${selN}</span>)</button></div>
   ${sizeSection('11x17',g['11x17'],tbl)}
   ${sizeSection('8.5x11',g['8.5x11'],tbl)}`;
 }
+function printQueueRows(){ const g=grouped(STATE.batch.filter(r=>r.hasPdf)); return [...g['11x17'],...g['8.5x11']]; }
+function printToggle(sku){ if(STATE.printSel[sku])delete STATE.printSel[sku]; else STATE.printSel[sku]=true; render(); }
+function printSelectAll(){ const rows=printQueueRows(); const allSel=rows.length&&rows.every(r=>STATE.printSel[r.sku]); rows.forEach(r=>{ if(allSel)delete STATE.printSel[r.sku]; else STATE.printSel[r.sku]=true; }); render(); }
+function printClear(){ STATE.printSel={}; render(); }
+function sendCheckedFiery(){ const rows=printQueueRows().filter(r=>STATE.printSel[r.sku]); if(!rows.length){toast('Check some rows first');return;}
+  rows.forEach(r=>queueFiery(r.sku,r.pdf,r.size,r.requested)); toast('Sent '+rows.length+' file(s) → Fiery Hold folder'); }
 
 function viewBoxes(){
   const bs=STATE.boxes;
@@ -1677,7 +1696,7 @@ function boxFnskuHtml(ab){ if(!curLabels()||!ab||!ab.items.length) return '';
   return `<div class="boxfnsku"><div class="bf-h">🏷 FNSKU labels for Box ${ab.box_no} — ${ab.items.length} item${ab.items.length===1?'':'s'} <span>each item has its own FNSKU · print the right count per item</span></div>${rows}</div>`; }
 function printLabelSku(n,sku,type){ const b=STATE.boxes.find(x=>x.box_no===n); if(!b)return; const ix=b.items.findIndex(i=>i.sku===sku); if(ix>=0)printLabel(n,ix,type); }
 function printLabel(n,ix,type){ const b=STATE.boxes.find(x=>x.box_no===n); if(b){const it=b.items[ix];it.label=type;sbItem(it,{label_status:type});
-  SB.from('print_jobs').insert({batch_id:CURRENT_BATCH?CURRENT_BATCH.id:null,product_sku:it.sku,file_path:(it.fnsku||''),size:b.size,copies:it.actual||it.qty,type:type,status:'queued'}).then(()=>{});
+  SB.from('print_jobs').insert({batch_id:CURRENT_BATCH?CURRENT_BATCH.id:null,product_sku:it.sku,file_path:(type==='fnsku'?fnPdfUrl(it.sku):printPdfUrl(it.sku)),size:b.size,copies:it.actual||it.qty,type:type,status:'queued'}).then(()=>{});
   toast(type.toUpperCase()+' label queued for '+it.sku+' ('+(it.actual||it.qty)+'×)');render();} }
 
 // ================= LIVE data layer =================
@@ -1781,9 +1800,9 @@ async function switchOrder(id){
 function rebuildRegister(){
   STATE.register=STATE.boxes.filter(b=>b.status==='packed'||b.status==='shipped').map(b=>({box_no:b.box_no,order:SHIPMENT.name,shipment:SHIPMENT.no,carton:(b.carton||'20×14×10'),size:b.size,weight_lb:+(b.weight_oz/16).toFixed(1),units:b.units,status:b.status,packed_at:'',contents:b.items.map(i=>({asin:i.asin||'',sku:i.sku,qty:i.actual,requested:i.qty,label:i.label})),shorts:b.items.filter(i=>i.actual<i.qty).map(i=>({sku:i.sku,asin:i.asin||'',short:i.qty-i.actual}))})).sort((a,b)=>a.box_no-b.box_no);
 }
-function queueFiery(sku,file,size,copies){ SB.from('print_jobs').insert({batch_id:CURRENT_BATCH?CURRENT_BATCH.id:null,product_sku:sku,file_path:file,size:size,copies:copies,type:'fiery',status:'queued'}).then(({error})=>{ toast(error?('Queue failed: '+error.message):('Sent '+copies+'× '+size+' → Fiery Hold folder')); }); }
+function queueFiery(sku,file,size,copies){ SB.from('print_jobs').insert({batch_id:CURRENT_BATCH?CURRENT_BATCH.id:null,product_sku:sku,file_path:printPdfUrl(sku),size:size,copies:copies,type:'fiery',status:'queued'}).then(({error})=>{ toast(error?('Queue failed: '+error.message):('Sent '+copies+'× '+size+' → Fiery Hold folder')); }); }
 async function sendWholeQueue(){ const g=grouped(STATE.batch.filter(r=>r.hasPdf)); const all=[...g['11x17'],...g['8.5x11']]; if(!all.length){toast('Nothing to send');return;}
-  const rows=all.map(r=>({batch_id:CURRENT_BATCH?CURRENT_BATCH.id:null,product_sku:r.sku,file_path:r.pdf,size:r.size,copies:r.requested,type:'fiery',status:'queued'}));
+  const rows=all.map(r=>({batch_id:CURRENT_BATCH?CURRENT_BATCH.id:null,product_sku:r.sku,file_path:printPdfUrl(r.sku),size:r.size,copies:r.requested,type:'fiery',status:'queued'}));
   const {error}=await SB.from('print_jobs').insert(rows); toast(error?('Queue failed: '+error.message):('Queued '+rows.length+' jobs → Fiery (11×17 first, then 8.5×11)')); }
 async function boot(){
   updateShipChip(); renderNav(); render();   // show the shell immediately
