@@ -523,6 +523,17 @@ nav button.on{outline:2.5px solid #fff;outline-offset:-2px;filter:brightness(1.1
 .boxbanner{background:#0c0e12!important;border:1px solid #23262e!important;color:#fff!important}
 .boxbanner .bb-no,.boxbanner .bb-stat span{color:#fff!important}
 .boxbanner .bb-sub{color:#b9c8d8!important}
+/* Per-box FNSKU labels panel */
+.boxfnsku{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-top:14px}
+.boxfnsku .bf-h{font-size:14px;font-weight:800;color:var(--gold);margin-bottom:10px}
+.boxfnsku .bf-h span{display:block;font-size:11.5px;font-weight:500;color:var(--muted);margin-top:2px}
+.bf-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--line);flex-wrap:wrap}
+.bf-row:first-of-type{border-top:0}
+.bf-row .thumb{width:34px;height:42px;flex-shrink:0}
+.bf-nm{flex:1;min-width:160px;font-size:13px;color:var(--ink)}
+.bf-nm code{font-size:11px;color:#9fb0c2}
+.bf-q{font-size:12.5px;font-weight:800;color:var(--mint);white-space:nowrap}
+.bf-none{font-size:12px;color:var(--muted);font-style:italic}
 </style></head>
 <body>
 <div id="gate">
@@ -729,7 +740,7 @@ function planBoxes(batch){
       while(rem>0){ if(!box)open();
         const room=Math.min(Math.floor((cap-box.weight_oz)/unit),Math.floor((capTh-box.thick_in)/unitTh));
         if(room<=0){open();continue;}
-        if(room<rem && rem<=fullBox && box.units>0){open();continue;}
+        // fill every box to capacity (mix SKUs, split as needed) — maximizes fill, no half-empty / tiny leftover boxes
         const put=Math.min(room,rem);
         box.items.push({sku:l.sku,title:l.title,asin:l.asin,qty:put,actual:put,unitOz:unit,thumb:l.thumb,fnsku:l.fnsku,label:'none'});
         box.weight_oz=+(box.weight_oz+put*unit).toFixed(1);box.thick_in=+(box.thick_in+put*unitTh).toFixed(3);box.units+=put;rem-=put;}
@@ -1013,7 +1024,7 @@ function viewPacker(){
           <div class="oc-dots">${ab.items.map((x,ix)=>`<span class="dot ${ix===step?'cur':''} ${x.picked?'pk':''}" onclick="packStep(${ix})"></span>`).join('')}</div>
           ${step<total-1?`<button class="btn" onclick="packStep(${step+1})">Next →</button>`:`<button class="btn ${allPicked?'':'ghost'}" onclick="packBox(${ab.box_no})">✓ Box done → next box</button>`}
         </div>
-      </div>${addPanel}`;
+      </div>${addPanel}${boxFnskuHtml(ab)}`;
   }
   return `<h1>Packer · iPad</h1><p class="sub">Pick a box, then click through it one item at a time — big picture, the exact amount to pick, and the <b>UPC / FNSKU / WPS</b> label. Two packers can each take a different box.</p>${picker}${body}`;
 }
@@ -1657,6 +1668,14 @@ function packBox(n){ const b=STATE.boxes.find(x=>x.box_no===n); if(!b)return;
 }
 function shipBox(n){ const r=STATE.register.find(x=>x.box_no===n); const b=STATE.boxes.find(x=>x.box_no===n); if(r){r.status='shipped';r.shipped_at='just now';} if(b){b.status='shipped';sbBox(b,{status:'shipped',shipped_at:new Date().toISOString()});} toast('Box '+n+' marked SHIPPED — kept in history + Google Sheet'); render(); }
 function shipAll(){ STATE.register.forEach(r=>{if(r.status!=='shipped'){r.status='shipped';r.shipped_at='just now';}}); STATE.boxes.forEach(b=>{if(b.status==='packed'){b.status='shipped';sbBox(b,{status:'shipped',shipped_at:new Date().toISOString()});}}); toast('All packed boxes marked SHIPPED'); render(); }
+// Per-box FNSKU panel: every item in the box + its FNSKU sheet + quantity, all in one place
+function boxFnskuHtml(ab){ if(!curLabels()||!ab||!ab.items.length) return '';
+  const rows=ab.items.map(it=>{ const p=byRaw.get(it.sku)||{}; const code=p.fnskuCode||''; const has=!!(it.fnsku||p.fnsku||code); const qty=it.actual||it.qty; const sk=esc(it.sku).replace(/'/g,"\\'");
+    return `<div class="bf-row">${thumbEl(it.thumb,it.sku)}<div class="bf-nm"><b>${esc(shortName(it))}</b> <code>${esc(it.sku)}</code>${code?` · FNSKU <b>${esc(code)}</b>`:''}</div>
+      <span class="bf-q">${qty}× label${qty===1?'':'s'}</span>
+      ${has?`<a class="btn sm" href="${esc(fnPdfUrl(it.sku))}" target="_blank" rel="noopener">Open FNSKU sheet ↗</a><button class="btn ghost sm" onclick="printLabelSku(${ab.box_no},'${sk}','fnsku')">Queue ${qty} → printer</button>`:`<span class="bf-none">no FNSKU (not on Amazon)</span>`}</div>`; }).join('');
+  return `<div class="boxfnsku"><div class="bf-h">🏷 FNSKU labels for Box ${ab.box_no} — ${ab.items.length} item${ab.items.length===1?'':'s'} <span>each item has its own FNSKU · print the right count per item</span></div>${rows}</div>`; }
+function printLabelSku(n,sku,type){ const b=STATE.boxes.find(x=>x.box_no===n); if(!b)return; const ix=b.items.findIndex(i=>i.sku===sku); if(ix>=0)printLabel(n,ix,type); }
 function printLabel(n,ix,type){ const b=STATE.boxes.find(x=>x.box_no===n); if(b){const it=b.items[ix];it.label=type;sbItem(it,{label_status:type});
   SB.from('print_jobs').insert({batch_id:CURRENT_BATCH?CURRENT_BATCH.id:null,product_sku:it.sku,file_path:(it.fnsku||''),size:b.size,copies:it.actual||it.qty,type:type,status:'queued'}).then(()=>{});
   toast(type.toUpperCase()+' label queued for '+it.sku+' ('+(it.actual||it.qty)+'×)');render();} }
