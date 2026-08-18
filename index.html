@@ -748,12 +748,18 @@ function getShipManual(sku){ const v=SHIPWT[sku]; return (v==null||v==='')?'':(+
 function computedShipOz(sku){ return getItemOz(sku)+(wSet(sku).mailer||0); }
 function getShipOz(sku){ const m=getShipManual(sku); return m!==''?m:computedShipOz(sku); }
 function setShipWt(sku,v){ v=(''+v).replace(/[^0-9.]/g,''); if(v==='')delete SHIPWT[sku]; else SHIPWT[sku]=v; try{ localStorage.setItem('jbg_shipwt',JSON.stringify(SHIPWT)); }catch(e){} }
+// Persistent per-item SIZE memory (per-device). When you correct a line's size in List Intake,
+// it's remembered here so every future list defaults that item to the right size.
+let SIZEOV={}; try{ SIZEOV=JSON.parse(localStorage.getItem('jbg_sizeoverride')||'{}')||{}; }catch(e){ SIZEOV={}; }
+function getSizeOv(sku){ const v=SIZEOV[sku]; return (v==='8.5x11'||v==='11x17')?v:''; }
+function setSizeOv(sku,size){ if(size!=='8.5x11'&&size!=='11x17')return; SIZEOV[sku]=size; try{ localStorage.setItem('jbg_sizeoverride',JSON.stringify(SIZEOV)); }catch(e){} }
 // Carton sizes — main is 20×14×10; the smaller ones are for sending samples out.
 const CARTONS=['20×14×10','12×12×8','12×9×4','9×6×4','6×6×6'];
 function buildBatch(list){
   return list.map(r=>{const {p,status,cands}=resolve(r.sku,r.asin);
     const ed=EDITS[r.sku]||{};
-    const size=ed.size||(p?p.size:sizeOf(r.sku));   // ed.size = manual per-line size override
+    // size priority: this session's toggle → remembered per-item correction → catalog size → filename guess
+    const size=ed.size||getSizeOv(r.sku)||getSizeOv(p?p.sku:r.sku)||(p&&p.size?p.size:sizeOf(r.sku));
     const sh=sheetsOf(p?p.sku:r.sku);
     const requested = ed.qty!=null ? ed.qty : r.requested;
     return {asin:r.asin,title:r.title,requested,orig:r.requested,held:!!ed.hold,list_sku:r.sku,notes:r.notes,
@@ -765,7 +771,7 @@ function activeLines(batch){ return batch.filter(b=>!b.held && b.requested>0); }
 function replan(){ STATE.batch=buildBatch(CURRENT_LIST); STATE.boxes=planBoxes(STATE.batch); }
 function setQty(sku,v){ EDITS[sku]=EDITS[sku]||{}; EDITS[sku].qty=Math.max(0,parseInt(v,10)||0); replan(); render(); }
 function toggleHold(sku){ EDITS[sku]=EDITS[sku]||{}; EDITS[sku].hold=!EDITS[sku].hold; replan(); toast(EDITS[sku].hold?'Holding '+sku+' — not sent this run':'Including '+sku+' again'); render(); }
-function toggleLineSize(sku){ EDITS[sku]=EDITS[sku]||{}; const cur=EDITS[sku].size||(STATE.batch.find(b=>b.list_sku===sku)||{}).size||'11x17'; EDITS[sku].size=(cur==='8.5x11'?'11x17':'8.5x11'); replan(); toast(sku+' → '+EDITS[sku].size); render(); }
+function toggleLineSize(sku){ EDITS[sku]=EDITS[sku]||{}; const cur=EDITS[sku].size||(STATE.batch.find(b=>b.list_sku===sku)||{}).size||'11x17'; const nx=(cur==='8.5x11'?'11x17':'8.5x11'); EDITS[sku].size=nx; setSizeOv(sku,nx); const b=STATE.batch.find(x=>x.list_sku===sku); if(b&&b.sku&&b.sku!==sku)setSizeOv(b.sku,nx); replan(); toast(sku+' → '+nx+'  (remembered for next time)'); render(); }
 // group by size (11x17 then 8.5x11), each sorted by qty desc — held / zero lines excluded
 function grouped(batch){
   const g={'11x17':[],'8.5x11':[]};
