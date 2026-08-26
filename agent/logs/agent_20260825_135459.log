@@ -1,0 +1,16 @@
+[2026-08-25 13:54:59] 
+[2026-08-25 13:54:59] ==== JBG Fiery Agent run started 2026-08-25 13:54:59 ====
+[2026-08-25 13:54:59]      log file: C:\Users\Jamsp\OneDrive\Desktop\Cowork\_Fiery_Logs\agent_20260825_135459.log
+[2026-08-25 13:54:59] 
+[2026-08-25 13:54:59]   Fiery API is ON - copy each value, then press Enter here. Read from the clipboard and cleared right after - never stored.
+[2026-08-25 13:55:26]   (9 characters)
+[2026-08-25 13:55:40]   (7340 characters)
+[2026-08-25 13:55:40]   ! Fiery API login failed: The remote server returned an error: (503) Server Unavailable.
+[2026-08-25 13:55:40]   Continuing WITHOUT Fiery API - bundles will fall back to manual, same as before.
+[2026-08-25 13:55:40] 
+[2026-08-25 13:55:40]   JBG Fiery Agent (HOT FOLDER) - polling every 5 s.
+[2026-08-25 13:55:40]   Dropping poster prints into: C:\Users\Jamsp\OneDrive\Desktop\Cowork\JBG Hold
+[2026-08-25 13:55:40]   FNSKU label jobs are skipped (those go to your label printer).
+[2026-08-25 13:55:40]   Copies: set in the Fiery Copies field at release (the number is in the job title).
+[2026-08-25 13:55:40]   Keep the Fiery Hot Folders Console open too. Close this window to stop.
+[2026-08-25 13:55:40] 

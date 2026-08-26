@@ -1,0 +1,19 @@
+[2026-08-25 17:57:20] 
+[2026-08-25 17:57:20] ==== JBG Fiery Agent run started 2026-08-25 17:57:20 ====
+[2026-08-25 17:57:20]      log file: C:\Users\Jamsp\OneDrive\Desktop\Cowork\_Fiery_Logs\agent_20260825_175720.log
+[2026-08-25 17:57:20] 
+[2026-08-25 17:57:21]   Fiery API is ON - using saved login for admin (delete fiery_credentials.xml next to this script to clear it).
+[2026-08-25 17:57:21]   Fiery API: connected as admin (job access confirmed).
+[2026-08-25 17:57:21] 
+[2026-08-25 17:57:21]   JBG Fiery Agent (HOT FOLDER) - polling every 5 s.
+[2026-08-25 17:57:21]   Dropping poster prints into: C:\Users\Jamsp\OneDrive\Desktop\Cowork\JBG Hold
+[2026-08-25 17:57:21]   FNSKU label jobs are skipped (those go to your label printer).
+[2026-08-25 17:57:21]   Copies: AUTOMATIC via Fiery API - true page count kept, Copies field set on import, nothing to type at release.
+[2026-08-25 17:57:21]   Keep the Fiery Hot Folders Console open too. Close this window to stop.
+[2026-08-25 17:57:21] 
+[2026-08-25 18:04:40]   (verified: job A00231468.6A8E106F.1180 - num pages=1, num copies=4)
+[2026-08-25 18:04:40]   (verified: job A00231468.6A8E106F.1180 - InputSlot=Tray3, EFMediaType=Heavy4, EFMediaWeight=257_300)
+[2026-08-25 18:04:40]   -> HELD  JBG-BIN-LAM-Madison  [8.5x11]  (x4 set automatically via Fiery API, media set via API)
+[2026-08-25 18:06:15]   (verified: job A00231468.6A8E10CE.1181 - num pages=1, num copies=5)
+[2026-08-25 18:06:15]   (verified: job A00231468.6A8E10CE.1181 - EFMediaWeight=257_300, EFMediaType=CoatedExtraheavy)
+[2026-08-25 18:06:15]   -> HELD  JBG-POS-LAM-LaundryCare-Symbols  [11x17]  (x5 set automatically via Fiery API, media set via API)

@@ -1,0 +1,16 @@
+[2026-08-25 14:23:44] 
+[2026-08-25 14:23:44] ==== JBG Fiery Agent run started 2026-08-25 14:23:44 ====
+[2026-08-25 14:23:44]      log file: C:\Users\Jamsp\OneDrive\Desktop\Cowork\_Fiery_Logs\agent_20260825_142344.log
+[2026-08-25 14:23:44] 
+[2026-08-25 14:23:44]   Fiery API is ON - copy each value, then press Enter here. Read from the clipboard and cleared right after - never stored.
+[2026-08-25 14:24:01]   (5 characters)
+[2026-08-25 14:24:18]   (344 characters)
+[2026-08-25 14:24:19]   Fiery API: connected as admin (job access confirmed).
+[2026-08-25 14:24:19] 
+[2026-08-25 14:24:19]   JBG Fiery Agent (HOT FOLDER) - polling every 5 s.
+[2026-08-25 14:24:19]   Dropping poster prints into: C:\Users\Jamsp\OneDrive\Desktop\Cowork\JBG Hold
+[2026-08-25 14:24:19]   FNSKU label jobs are skipped (those go to your label printer).
+[2026-08-25 14:24:19]   Copies: AUTOMATIC via Fiery API - true page count kept, Copies field set on import, nothing to type at release.
+[2026-08-25 14:24:19]   Keep the Fiery Hot Folders Console open too. Close this window to stop.
+[2026-08-25 14:24:19] 
+[2026-08-25 14:25:03]   -> HELD  JBG-POS-LAM-Animals_Birds_Insects  [11x17]  (x5 set automatically via Fiery API)

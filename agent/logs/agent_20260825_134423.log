@@ -1,0 +1,33 @@
+[2026-08-25 13:44:24] 
+[2026-08-25 13:44:24] ==== JBG Fiery Agent run started 2026-08-25 13:44:24 ====
+[2026-08-25 13:44:24]      log file: C:\Users\Jamsp\OneDrive\Desktop\Cowork\_Fiery_Logs\agent_20260825_134423.log
+[2026-08-25 13:44:24] 
+[2026-08-25 13:44:24]   Fiery API is ON - copy each value, then press Enter here. Read from the clipboard and cleared right after - never stored.
+[2026-08-25 13:45:03]   (6 characters)
+[2026-08-25 13:45:30]   (7340 characters)
+[2026-08-25 13:45:30]   Fiery API: logged in as API.
+[2026-08-25 13:45:30] 
+[2026-08-25 13:45:30]   JBG Fiery Agent (HOT FOLDER) - polling every 5 s.
+[2026-08-25 13:45:30]   Dropping poster prints into: C:\Users\Jamsp\OneDrive\Desktop\Cowork\JBG Hold
+[2026-08-25 13:45:30]   FNSKU label jobs are skipped (those go to your label printer).
+[2026-08-25 13:45:30]   Copies: AUTOMATIC via Fiery API - true page count kept, Copies field set on import, nothing to type at release.
+[2026-08-25 13:45:30]   Keep the Fiery Hot Folders Console open too. Close this window to stop.
+[2026-08-25 13:45:30] 
+[2026-08-25 13:48:22]   ! Fiery API job lookup error: The remote server returned an error: (401) Unauthorized.
+[2026-08-25 13:48:23]   ! Fiery API job lookup error: The remote server returned an error: (401) Unauthorized.
+[2026-08-25 13:48:24]   ! Fiery API job lookup error: The remote server returned an error: (401) Unauthorized.
+[2026-08-25 13:48:25]   ! Fiery API job lookup error: The remote server returned an error: (401) Unauthorized.
+[2026-08-25 13:48:26]   ! Fiery API job lookup error: The remote server returned an error: (401) Unauthorized.
+[2026-08-25 13:48:27]   ! Fiery API job lookup error: The remote server returned an error: (401) Unauthorized.
+[2026-08-25 13:48:28]   ! Fiery API job lookup error: The remote server returned an error: (401) Unauthorized.
+[2026-08-25 13:48:29]   ! Fiery API job lookup error: The remote server returned an error: (401) Unauthorized.
+[2026-08-25 13:48:30]   ! Fiery API job lookup error: The remote server returned an error: (401) Unauthorized.
+[2026-08-25 13:48:31]   ! Fiery API job lookup error: The remote server returned an error: (401) Unauthorized.
+[2026-08-25 13:48:32]   ! Fiery API job lookup error: The remote server returned an error: (401) Unauthorized.
+[2026-08-25 13:48:33]   ! Fiery API job lookup error: The remote server returned an error: (401) Unauthorized.
+[2026-08-25 13:48:34]   ! Fiery API job lookup error: The remote server returned an error: (401) Unauthorized.
+[2026-08-25 13:48:35]   ! Fiery API job lookup error: The remote server returned an error: (401) Unauthorized.
+[2026-08-25 13:48:36]   ! Fiery API job lookup error: The remote server returned an error: (401) Unauthorized.
+[2026-08-25 13:48:37]   (every job-lookup attempt threw an error - see above - never got a response to inspect)
+[2026-08-25 13:48:37]   ! Fiery API: couldn't find held job matching 'JBG-POS-LAM-LaundryGuide-Combo  FID22c48a9a  x6  [11x17]' - left for manual entry
+[2026-08-25 13:48:37]   -> HELD  JBG-POS-LAM-LaundryGuide-Combo  [11x17]  (x6 in title (Fiery API couldn't set it this time - set Copies at release))
