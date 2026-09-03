@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+poster_qc/.env
+.env
+*.log
+/QC_OUT/
+/jobs/
+/_work/
+desktop.ini
+.playwright-mcp/

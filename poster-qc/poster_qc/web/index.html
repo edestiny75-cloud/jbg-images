@@ -1,0 +1,937 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Jelly Bean Genius — Poster QC Dashboard</title>
+<style>
+:root{
+  --page:#0f1115; --ink:#1a1a1a; --muted:#666; --meta:#8a93a6;
+  --purple:#3a2e5c; --purple-dark:#1a2744; --purple-tint:#efedf5;
+  --grey-bg:#eceef3; --grey-ink:#333;
+  --green:#1f7a4d; --green-dark:#155c3a; --green-tint:#eaf6ef;
+  --amber:#b9822a; --amber-dark:#7a5410; --amber-tint:#fbf3e4;
+  --red:#b03a3a; --red-dark:#7d2323; --red-tint:#fbeaea;
+  --blue:#2f5aa8; --blue-dark:#1f3f7a; --blue-tint:#e9eff9;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;background:var(--page);color:var(--ink)}
+a{color:var(--purple)}
+button{font-family:inherit}
+
+/* hero */
+.hero{background:linear-gradient(135deg,var(--purple-dark),var(--purple));color:#fff;padding:34px 28px 30px;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center}
+.hero h1{margin:0;font-size:30px;font-weight:700;letter-spacing:.3px}
+.hero p{margin:0;font-size:15px;opacity:.86}
+.hero .hero-meta{font-size:13px;opacity:.7;margin-top:6px}
+
+/* layout */
+.wrap{max-width:1240px;margin:0 auto;padding:26px 20px 60px;display:flex;flex-direction:column;gap:22px}
+.card{background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 6px 22px rgba(0,0,0,.28);border-top:6px solid var(--purple)}
+.card-pad{padding:22px 26px 24px;display:flex;flex-direction:column;gap:16px}
+.section-label{font-size:12px;letter-spacing:1px;text-transform:uppercase;padding-bottom:6px;border-bottom:2px solid var(--purple-tint);color:var(--purple)}
+
+/* buttons */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;font-size:13px;font-weight:600;padding:9px 15px;border-radius:9px;border:none;cursor:pointer;text-decoration:none;white-space:nowrap}
+.btn.primary{background:var(--purple);color:#fff}
+.btn.primary:hover{background:var(--purple-dark)}
+.btn.alt{background:var(--grey-bg);color:var(--grey-ink)}
+.btn.alt:hover{background:#dfe2ea}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn.run{font-size:15px;font-weight:800;padding:11px 26px;background:linear-gradient(135deg,var(--purple-dark),var(--purple));color:#fff}
+.btn.run:hover{filter:brightness(1.08)}
+
+/* run panel */
+.run-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px}
+.dropzone{background:#f4f2fa;border:2px dashed #b9b0d6;border-radius:12px;min-height:196px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:24px;cursor:pointer;transition:background .15s,border-color .15s}
+.dropzone.drag{background:var(--purple-tint);border-color:var(--purple)}
+.dropzone .dz-title{font-size:18px;font-weight:700;color:var(--purple)}
+.dropzone .dz-sub{font-size:13px;color:var(--muted);text-align:center}
+.dz-btns{display:flex;gap:10px;margin-top:6px}
+.dz-btns .btn{pointer-events:auto}
+.left-col{display:flex;flex-direction:column;gap:10px}
+.selected-count{font-size:12.5px;color:var(--muted)}
+.selected-list{display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:inline-flex;align-items:center;gap:6px;background:var(--purple-tint);color:var(--purple);border-radius:16px;padding:4px 6px 4px 12px;font-size:12.5px}
+.chip.chip-skip{background:var(--red-tint);color:var(--red-dark)}
+.chip button{background:none;border:none;color:inherit;font-size:15px;cursor:pointer;line-height:1;padding:2px 6px}
+.clear-link{align-self:flex-start;font-size:12px;color:var(--muted);background:none;border:none;text-decoration:underline;cursor:pointer;padding:0}
+
+.field-col{display:flex;flex-direction:column;gap:14px}
+.field-label{font-size:13px;font-weight:700;color:var(--grey-ink)}
+.box-input{font-size:13px;color:var(--ink);background:#f7f7f9;border:1px solid #e3e5ec;border-radius:8px;padding:10px 12px;width:100%;font-family:inherit}
+.box-input::placeholder{color:var(--meta)}
+textarea.box-input{min-height:78px;resize:vertical;font-size:12.5px;line-height:1.5;color:#555}
+.hint{font-size:11px;color:var(--meta);line-height:1.5}
+
+.toggle-run-row{display:flex;align-items:center;justify-content:space-between;margin-top:4px;flex-wrap:wrap;gap:12px}
+.toggle-row{display:flex;align-items:center;gap:10px;font-size:13.5px;color:var(--grey-ink)}
+.toggle-track{width:38px;height:22px;border-radius:11px;background:#c9cbd6;position:relative;transition:background .15s;flex:none}
+.toggle-track.on{background:var(--purple)}
+.toggle-thumb{position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:8px;background:#fff;transition:left .15s}
+.toggle-track.on .toggle-thumb{left:19px}
+.run-actions{display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+.run-status{font-size:12px;color:var(--meta)}
+
+/* job header (on dark page bg) */
+.job-block{display:flex;flex-direction:column;gap:16px}
+.job-header{display:flex;align-items:center;justify-content:space-between;gap:10px;color:#fff;padding:4px 2px;cursor:pointer;flex-wrap:wrap}
+.job-header-left{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.job-title{font-size:18px;font-weight:700}
+.job-meta{font-size:12px;color:#b8bfd0}
+.job-header-right{display:flex;align-items:center;gap:10px}
+.chev{font-size:12px;color:#b8bfd0}
+.job-body{display:flex;flex-direction:column;gap:16px}
+.job-toolbar{display:flex;flex-wrap:wrap;gap:10px}
+.loading{font-size:13px;color:var(--meta);padding:10px 2px;color:#b8bfd0}
+.empty{font-size:13px;color:var(--meta);padding:14px 2px}
+
+/* pills */
+.pill{display:inline-block;color:#fff;font-size:12px;font-weight:700;padding:3px 10px;border-radius:20px;white-space:nowrap}
+.pill.mini{font-size:11px;padding:2px 9px}
+
+/* poster grid */
+.poster-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:22px}
+.poster-card{background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 6px 22px rgba(0,0,0,.28);cursor:pointer;transition:transform .12s}
+.poster-card:hover{transform:translateY(-2px)}
+.poster-thumb{height:230px;display:flex;align-items:center;justify-content:center;padding:14px}
+.poster-thumb img{max-height:100%;max-width:100%;object-fit:contain;box-shadow:0 3px 10px rgba(0,0,0,.25);border-radius:4px}
+.poster-thumb .ph-box{width:132px;height:200px;border-radius:4px;box-shadow:0 3px 10px rgba(0,0,0,.25)}
+.poster-info{padding:14px 16px 18px;display:flex;flex-direction:column;gap:6px}
+.poster-title{font-size:18px;font-weight:700}
+.poster-counts{font-size:13px;color:var(--muted);line-height:1.35}
+.poster-foot{margin-top:8px;display:flex;justify-content:space-between;align-items:center}
+.poster-link{font-size:13px;font-weight:600}
+.poster-error{font-size:12.5px;color:var(--red-dark);background:var(--red-tint);border-radius:6px;padding:8px 10px}
+
+/* detail panel */
+.detail-panel{background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.detail-head{padding:20px 26px;color:#fff;display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap}
+.detail-head-left{display:flex;flex-direction:column;gap:6px}
+.detail-head-left .dt{font-size:24px;font-weight:800}
+.detail-head-left .ds{font-size:12.5px;opacity:.9}
+.detail-actions{display:flex;gap:10px;flex-wrap:wrap}
+.btn.on-dark{background:#fff}
+.btn.on-dark.ghost{background:rgba(255,255,255,.18);color:#fff}
+.detail-body{padding:22px 26px 30px;display:grid;grid-template-columns:340px minmax(0,1fr);gap:26px}
+.detail-left{display:flex;flex-direction:column;gap:20px}
+.detail-thumb{border-radius:12px;padding:16px;display:flex;align-items:center;justify-content:center}
+.detail-thumb img{max-width:100%;border-radius:6px;box-shadow:0 4px 14px rgba(0,0,0,.3)}
+.detail-thumb .ph-box{width:100%;height:220px;border-radius:6px}
+.detail-section{display:flex;flex-direction:column;gap:10px}
+.detail-section-label{font-size:12px;letter-spacing:1px;text-transform:uppercase;padding-bottom:6px;border-bottom:2px solid}
+.detail-what{font-size:13.5px;line-height:1.6;color:#333}
+.detail-right{display:flex;flex-direction:column;gap:20px}
+
+table.findings{width:100%;font-size:13.5px;border-collapse:collapse}
+table.findings th{color:var(--meta);font-size:12px;text-align:left;font-weight:600;padding:6px 8px}
+table.findings td{padding:9px 8px;border-top:1px solid #f0f0f0;vertical-align:top}
+.fword.wrong{font-weight:700}
+.fword.right{font-weight:700}
+.fkind{color:var(--muted)}
+.fexp{cursor:pointer;color:var(--purple);font-size:11px;user-select:none}
+.no-findings{font-size:12.5px;color:var(--muted)}
+.attempts-row td{background:#fafafc;padding:12px}
+.attempt{border-left:3px solid #ddd;padding:6px 0 6px 10px;margin-bottom:10px;font-size:12px}
+.attempt.pass{border-left-color:var(--green)}
+.attempt.fail{border-left-color:var(--red)}
+.attempt-head{font-weight:600}
+.attempt-read,.attempt-note{color:var(--muted);margin-top:2px}
+.crops{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:8px;max-width:340px}
+.crop-item{display:flex;flex-direction:column;gap:4px;text-decoration:none}
+.crop-item img{width:100%;border-radius:8px;border:2px solid #f0f0f0;background:#fff}
+.crop-item.after img{border-color:#cfe9d9}
+.crop-item .cap{font-size:11px;color:#777;text-align:center}
+.crop-item.after .cap{color:var(--green-dark);font-weight:600}
+.hfbox{margin-top:8px;background:#fff;border:1px solid #e3e5ec;border-radius:8px;padding:8px 10px}
+.hfrow{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.copybtn{font-size:11px;padding:3px 10px;border-radius:6px;border:1px solid #e3e5ec;background:var(--purple-tint);color:var(--purple);cursor:pointer}
+.hfbox code{display:block;white-space:pre-wrap;background:#f7f7f9;padding:8px;border-radius:6px;margin-top:6px;font-size:11.5px}
+
+/* original/fixed compare + facts */
+.two-up{display:flex;gap:10px;width:100%}
+.two-up-col{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px;align-items:center}
+.two-up-label{font-size:11px;font-weight:700;color:var(--purple);text-transform:uppercase;letter-spacing:.5px}
+.two-up-col img,.two-up-col a{max-width:100%}
+.two-up-col img{border-radius:6px;box-shadow:0 4px 14px rgba(0,0,0,.3)}
+
+/* review mode: apply panel */
+.apply-check{width:16px;height:16px;cursor:pointer}
+.right-input{width:100%;min-width:120px}
+.add-change-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.add-change-row .box-input{flex:1;min-width:140px}
+.arrow{color:var(--muted);font-size:13px}
+.custom-change-list{display:flex;flex-wrap:wrap;gap:6px;min-height:4px}
+.custom-change-chip{display:inline-flex;align-items:center;gap:6px;background:var(--purple-tint);color:var(--purple);border-radius:16px;padding:4px 6px 4px 12px;font-size:12.5px}
+.custom-change-chip button{background:none;border:none;color:inherit;font-size:15px;cursor:pointer;line-height:1;padding:2px 6px}
+.apply-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+
+/* log drawer */
+.log-drawer{border-radius:10px;overflow:hidden;border:1px solid rgba(255,255,255,.08)}
+.log-head{padding:10px 14px;background:rgba(255,255,255,.06);color:#b8bfd0;cursor:pointer;font-size:12.5px;display:flex;justify-content:space-between}
+.log-body{margin:0;max-height:260px;overflow:auto;background:#1e1e28;color:#c9e6c9;font-family:Consolas,monospace;font-size:11.5px;padding:10px 14px;white-space:pre-wrap}
+
+.footer-legend{color:var(--meta);font-size:12.5px;text-align:center;padding-top:6px}
+
+@media (max-width:900px){
+  .run-grid{grid-template-columns:1fr}
+  .detail-body{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <h1>Jelly Bean Genius — Poster QC</h1>
+  <p>Drop posters in · every word gets read · errors get fixed in place · you get proof before it prints</p>
+  <div class="hero-meta">Auto-fixes spelling, grammar and consistency · facts and layout are flagged for you, never edited</div>
+</div>
+
+<div class="wrap">
+
+  <div class="card">
+    <div class="card-pad">
+      <div class="section-label">Run a QC job</div>
+      <div class="run-grid">
+
+        <div class="left-col">
+          <div class="dropzone" id="dropzone">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#3a2e5c" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"></path><path d="M7 9l5-5 5 5"></path><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"></path></svg>
+            <div class="dz-title">Drop posters here</div>
+            <div class="dz-sub">One image, a batch, a whole folder, or a ZIP &middot; PNG, JPG, PDF, ZIP</div>
+            <div class="dz-btns">
+              <button class="btn primary" id="pickFilesBtn" type="button">Choose files</button>
+              <button class="btn alt" id="pickFolderBtn" type="button">Choose folder</button>
+            </div>
+          </div>
+          <input type="file" id="fileInput" multiple accept=".png,.jpg,.jpeg,.webp,.pdf,.zip" hidden>
+          <input type="file" id="folderInput" webkitdirectory directory multiple hidden>
+          <div class="selected-count" id="selectedCount"></div>
+          <div class="selected-list" id="selectedList"></div>
+          <button class="clear-link" id="clearBtn" type="button" style="display:none">Clear selection</button>
+        </div>
+
+        <div class="field-col">
+          <div>
+            <div class="field-label">Or point at a folder on this PC</div>
+            <input type="text" class="box-input" id="serverPath" placeholder="C:\Users\Jamsp\OneDrive\Desktop\...\SomeFolder" style="margin-top:6px">
+            <div class="hint">If set, this is used instead of any selected files/folder above. Good for big folders you don't want to upload.</div>
+          </div>
+          <div>
+            <div class="field-label">Known errors (optional)</div>
+            <textarea class="box-input" id="instructions" style="margin-top:6px" placeholder="## JBG-POS-LAM-GreatDepression&#10;- &quot;UAEMFLOYNENT&quot; &rarr; &quot;UNEMPLOYMENT&quot;"></textarea>
+            <div class="hint">One <code>#</code> line per SKU, then <code>Change "wrong" to "right"</code> or <code>"wrong" &rarr; "right"</code> lines underneath. These are injected as must-find items; the inspector still looks for everything else.</div>
+          </div>
+          <div class="toggle-run-row">
+            <label class="toggle-row" id="fixToggleLabel">
+              <input type="checkbox" id="fixCheck" checked style="position:absolute;opacity:0;width:0;height:0">
+              <span class="toggle-track on" id="fixTrack"><span class="toggle-thumb"></span></span>
+              <span id="fixLabelText">Auto-fix on &middot; verified before/after on every change</span>
+            </label>
+            <div class="run-actions">
+              <button class="btn run" id="runBtn" type="button">Run QC</button>
+              <span class="run-status" id="runStatus"></span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex;justify-content:flex-end;margin:-6px 0 10px"><button class="btn alt" type="button" onclick="archiveFinished()">Archive all finished</button></div>
+  <div id="jobsContainer"><div class="empty">Loading&hellip;</div></div>
+
+  <div class="footer-legend">PASS = every change verified &middot; REVIEW = fixed, with notes for you &middot; NEEDS YOU = something needs a hand, prompt included</div>
+
+</div>
+
+<script>
+const SKIP_RE = /_FIXED|_FINAL|_NEEDS_HUMAN/i;
+let selectedFiles = [];
+let jobs = [];
+let jobsDetail = {};
+let openJobs = new Set();
+let openPosters = new Set();   // keys: `${jobId}:${sku}`
+let openFindings = new Set();  // keys: `${jobId}:${findingId}`
+let openLogs = new Set();      // keys: jobId
+let customChanges = {};        // keys: `${jobId}:${sku}` -> [{wrong, right}, ...] (review-mode "add my own change")
+
+function idKey(key) { return key.replace(/[^a-zA-Z0-9_-]/g, '_'); }
+
+// One persistent DOM node per job id, only touched when that job's data/expand-state actually
+// changes. Avoids blowing away expanded cards / in-flight clicks on every 2s poll.
+let jobNodes = {};
+let jobSigCache = {};
+
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const folderInput = document.getElementById('folderInput');
+const pickFilesBtn = document.getElementById('pickFilesBtn');
+const pickFolderBtn = document.getElementById('pickFolderBtn');
+const clearBtn = document.getElementById('clearBtn');
+const selectedCount = document.getElementById('selectedCount');
+const selectedList = document.getElementById('selectedList');
+const serverPathInput = document.getElementById('serverPath');
+const instructionsTextarea = document.getElementById('instructions');
+const fixCheck = document.getElementById('fixCheck');
+const fixTrack = document.getElementById('fixTrack');
+const fixLabelText = document.getElementById('fixLabelText');
+const runBtn = document.getElementById('runBtn');
+const runStatus = document.getElementById('runStatus');
+const jobsContainer = document.getElementById('jobsContainer');
+
+function escapeHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// ---------- status styling ----------
+const STATUS_META = {
+  CLEAN:       {label:'PASS',       accent:'#1f7a4d', dark:'#155c3a', tint:'#eaf6ef'},
+  REVIEW:      {label:'REVIEW',     accent:'#b9822a', dark:'#7a5410', tint:'#fbf3e4'},
+  NEEDS_HUMAN: {label:'NEEDS YOU',  accent:'#b03a3a', dark:'#7d2323', tint:'#fbeaea'},
+  REPORT:      {label:'REPORT',     accent:'#3a2e5c', dark:'#1a2744', tint:'#efedf5'},
+  running:     {label:'RUNNING',    accent:'#2f5aa8', dark:'#1f3f7a', tint:'#e9eff9'},
+  queued:      {label:'QUEUED',     accent:'#2f5aa8', dark:'#1f3f7a', tint:'#e9eff9'},
+  error:       {label:'ERROR',      accent:'#b03a3a', dark:'#7d2323', tint:'#fbeaea'},
+};
+function statusMeta(s) { return STATUS_META[s] || STATUS_META.queued; }
+function pillHtml(status, mini) {
+  const m = statusMeta(status);
+  return `<span class="pill${mini ? ' mini' : ''}" style="background:${m.accent}">${escapeHtml(m.label)}</span>`;
+}
+function findingPill(f) {
+  switch (f.status) {
+    case 'fixed': {
+      const attempts = f.attempts || [];
+      const passAttempt = attempts.find(a => a.passed) || attempts[attempts.length - 1];
+      const score = passAttempt ? passAttempt.style_score : '';
+      return {label: `FIXED${score !== '' && score != null ? ' \u00b7 ' + score : ''}`, bg: '#1f7a4d', color: '#fff'};
+    }
+    case 'review': return {label: 'REVIEW', bg: '#b9822a', color: '#fff'};
+    case 'needs_human': return {label: 'NEEDS YOU', bg: '#b03a3a', color: '#fff'};
+    case 'skipped': return {label: 'NOTE \u00b7 left as is', bg: '#eceef3', color: '#333'};
+    case 'open': return {label: 'PENDING', bg: '#2f5aa8', color: '#fff'};
+    default: return {label: (f.status || '').toUpperCase(), bg: '#eceef3', color: '#333'};
+  }
+}
+
+// ---------- file selection ----------
+function addFiles(fileList) {
+  for (const f of fileList) {
+    if (!selectedFiles.some(sf => sf.name === f.name && sf.size === f.size)) selectedFiles.push(f);
+  }
+  renderSelected();
+}
+function removeFile(i) { selectedFiles.splice(i, 1); renderSelected(); }
+function clearFiles() { selectedFiles = []; renderSelected(); }
+function renderSelected() {
+  selectedCount.textContent = selectedFiles.length ? `${selectedFiles.length} file(s) selected` : '';
+  selectedList.innerHTML = selectedFiles.map((f, i) => {
+    const skip = SKIP_RE.test(f.name);
+    return `<span class="chip ${skip ? 'chip-skip' : ''}" title="${skip ? 'already processed — will be skipped' : ''}">${escapeHtml(f.name)}<button onclick="removeFile(${i})">&times;</button></span>`;
+  }).join('');
+  clearBtn.style.display = selectedFiles.length ? 'inline-block' : 'none';
+}
+
+dropzone.addEventListener('click', () => fileInput.click());
+pickFilesBtn.addEventListener('click', e => { e.stopPropagation(); fileInput.click(); });
+pickFolderBtn.addEventListener('click', e => { e.stopPropagation(); folderInput.click(); });
+clearBtn.addEventListener('click', clearFiles);
+fileInput.addEventListener('change', e => { addFiles(e.target.files); fileInput.value = ''; });
+folderInput.addEventListener('change', e => { addFiles(e.target.files); folderInput.value = ''; });
+
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
+dropzone.addEventListener('drop', async e => {
+  e.preventDefault(); dropzone.classList.remove('drag');
+  const items = e.dataTransfer.items;
+  let files = [];
+  if (items && items.length && items[0].webkitGetAsEntry) {
+    for (const item of items) {
+      const entry = item.webkitGetAsEntry();
+      if (entry) await traverseEntry(entry, files);
+    }
+  } else {
+    files = Array.from(e.dataTransfer.files);
+  }
+  addFiles(files);
+});
+async function traverseEntry(entry, files) {
+  if (entry.isFile) {
+    await new Promise(res => entry.file(f => { files.push(f); res(); }));
+  } else if (entry.isDirectory) {
+    const reader = entry.createReader();
+    let all = [];
+    while (true) {
+      const batch = await new Promise((res, rej) => reader.readEntries(res, rej));
+      if (!batch.length) break;
+      all = all.concat(batch);
+    }
+    for (const e of all) await traverseEntry(e, files);
+  }
+}
+
+// ---------- auto-fix toggle ----------
+function syncFixToggle() {
+  const on = fixCheck.checked;
+  fixTrack.classList.toggle('on', on);
+  fixLabelText.textContent = on
+    ? 'Auto-fix on \u00b7 verified before/after on every change'
+    : 'Auto-fix off \u00b7 inspect only, no edits';
+}
+fixCheck.addEventListener('change', syncFixToggle);
+syncFixToggle();
+
+// ---------- run ----------
+async function runJob() {
+  const path = serverPathInput.value.trim();
+  const instructions = instructionsTextarea.value;
+  runBtn.disabled = true; runStatus.textContent = 'Starting\u2026';
+  try {
+    let resp;
+    if (path) {
+      resp = await fetch('/api/jobs/folder', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({path, instructions, fix: fixCheck.checked})
+      });
+    } else if (selectedFiles.length) {
+      const fd = new FormData();
+      for (const f of selectedFiles) fd.append('files', f, f.name);
+      fd.append('instructions', instructions);
+      fd.append('fix', fixCheck.checked ? '1' : '0');
+      resp = await fetch('/api/jobs', {method: 'POST', body: fd});
+    } else {
+      runStatus.textContent = 'Select files, a folder, or enter a server folder path first.';
+      runBtn.disabled = false; return;
+    }
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.detail || 'failed to start job');
+    runStatus.textContent = `Job ${data.job_id} queued.`;
+    selectedFiles = []; renderSelected();
+    openJobs.add(data.job_id);
+    await pollOnce();  // fetches fresh state and (re)starts polling since the new job is queued
+  } catch (e) {
+    runStatus.textContent = 'Error: ' + e.message;
+  } finally {
+    runBtn.disabled = false;
+  }
+}
+runBtn.addEventListener('click', runJob);
+
+// ---------- polling ----------
+// Self-scheduling: polls every 2s only while some job is queued/running, and stops itself the
+// moment nothing is active. runJob()/toggleJob() call pollOnce() directly (bypassing the timer),
+// which re-evaluates activity at the end and restarts the chain if needed — so submitting a new
+// job (or opening one) always resumes polling even if it had stopped.
+let pollTimer = null;
+function isActive() { return jobs.some(j => j.status === 'queued' || j.status === 'running'); }
+
+async function pollOnce() {
+  try {
+    const resp = await fetch('/api/jobs');
+    jobs = await resp.json();
+  } catch (e) { console.error('poll jobs failed', e); }
+  for (const id of Array.from(openJobs)) {
+    try {
+      const r = await fetch('/api/jobs/' + encodeURIComponent(id));
+      if (r.ok) jobsDetail[id] = await r.json();
+    } catch (e) { console.error('poll detail failed', e); }
+  }
+  render();
+  if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+  if (isActive()) pollTimer = setTimeout(pollOnce, 2000);
+}
+pollOnce().then(restoreFromHash);
+
+// Deep link from a report page: #poster=<sku> reopens that poster's panel (latest job that has it)
+async function restoreFromHash() {
+  const m = /poster=([^&]+)/.exec(location.hash || '');
+  if (!m) return;
+  const sku = decodeURIComponent(m[1]);
+  for (const job of [...jobs].reverse()) {
+    try {
+      const r = await fetch('/api/jobs/' + encodeURIComponent(job.id));
+      if (!r.ok) continue;
+      const d = await r.json();
+      const p = (d.posters || []).find(x => x.sku === sku);
+      if (!p) continue;
+      jobsDetail[job.id] = d;
+      openJobs.add(job.id); openPosters.add(job.id + ':' + sku);
+      render();
+      const el = document.getElementById('detail-' + idKey(job.id + ':' + sku));
+      if (el) el.scrollIntoView({behavior: 'smooth', block: 'start'});
+      history.replaceState(null, '', location.pathname);
+      return;
+    } catch (e) { console.error(e); }
+  }
+}
+
+// ---------- rendering ----------
+function toggleJob(id) {
+  if (openJobs.has(id)) { openJobs.delete(id); render(); }
+  else { openJobs.add(id); pollOnce(); }  // fetch detail immediately on first expand
+}
+function togglePoster(key) { openPosters.has(key) ? openPosters.delete(key) : openPosters.add(key); render(); }
+async function approvePoster(jobId, index) {
+  let dest = localStorage.getItem('approveDest') || '';
+  const answer = prompt('Save approved files to this folder (a sub-folder named by SKU is created inside it):', dest || 'C:\Users\Jamsp\OneDrive\Desktop\JBG_QC_INBOX\APPROVED');
+  if (answer === null) return;
+  dest = answer.trim(); localStorage.setItem('approveDest', dest);
+  try {
+    const r = await fetch(`/api/jobs/${encodeURIComponent(jobId)}/posters/${index}/approve`, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({dest: dest || null})});
+    const d = await r.json();
+    if (!r.ok) { alert('Could not save: ' + (d.detail || r.status)); return; }
+    alert('Saved to:
+' + d.dest + '
+
+Files: ' + d.files.join(', '));
+    await pollOnce();
+  } catch (e) { alert('Could not save: ' + e); }
+}
+async function archiveJob(jobId) {
+  if (!confirm('Move this job off the front page? Files stay on disk in jobs\\_archive.')) return;
+  const r = await fetch(`/api/jobs/${encodeURIComponent(jobId)}/archive`, {method: 'POST'});
+  if (!r.ok) { const d = await r.json().catch(() => ({})); alert('Could not archive: ' + (d.detail || r.status)); return; }
+  openJobs.delete(jobId); await pollOnce();
+}
+async function archiveFinished() {
+  if (!confirm('Move every finished job off the front page? Files stay on disk in jobs\\_archive.')) return;
+  const r = await fetch('/api/jobs/archive_finished', {method: 'POST'});
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) { alert('Could not archive: ' + (d.detail || r.status)); return; }
+  openJobs.clear(); openPosters.clear(); await pollOnce();
+  alert(`${d.archived} job(s) moved to ${d.folder}`);
+}
+function closePoster(key) {
+  openPosters.delete(key); render();
+  const jobId = key.split(':')[0];
+  const el = document.getElementById('job-' + idKey(jobId)) || document.querySelector(`[data-job="${jobId}"]`);
+  (el ? el.scrollIntoView({behavior: 'smooth', block: 'start'}) : window.scrollTo({top: 0, behavior: 'smooth'}));
+}
+function toggleFinding(key) { openFindings.has(key) ? openFindings.delete(key) : openFindings.add(key); render(); }
+function toggleLog(id) { openLogs.has(id) ? openLogs.delete(id) : openLogs.add(id); render(); }
+
+function copyText(btn, text) {
+  const done = () => { const old = btn.textContent; btn.textContent = 'Copied!'; setTimeout(() => btn.textContent = old, 1200); };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(done).catch(() => fallbackCopy(text, done));
+  } else {
+    fallbackCopy(text, done);
+  }
+}
+function fallbackCopy(text, done) {
+  const ta = document.createElement('textarea');
+  ta.value = text; document.body.appendChild(ta); ta.select();
+  try { document.execCommand('copy'); done(); } catch (e) { /* ignore */ }
+  document.body.removeChild(ta);
+}
+
+function render() {
+  if (!jobs.length) {
+    jobsContainer.innerHTML = '<div class="empty">No jobs yet. Drop posters above and press Run QC.</div>';
+    jobNodes = {}; jobSigCache = {};
+    return;
+  }
+  if (jobsContainer.querySelector(':scope > .empty')) jobsContainer.innerHTML = '';
+
+  const seen = new Set();
+  let prevNode = null;
+  for (const job of jobs) {
+    seen.add(job.id);
+    const detail = jobsDetail[job.id];
+    // Expand/collapse state for this job only, so toggling one job never dirties another's cache.
+    const stateKey = JSON.stringify({
+      open: openJobs.has(job.id),
+      log: openLogs.has(job.id),
+      posters: Array.from(openPosters).filter(k => k.startsWith(job.id + ':')).sort(),
+      findings: Array.from(openFindings).filter(k => k.startsWith(job.id + ':')).sort(),
+    });
+    // Cheap per-job "did anything change" signature: the job summary + full detail (when loaded)
+    // + this job's own expand state. Re-render this job's DOM only when the signature changes.
+    const sig = JSON.stringify(job) + '|' + JSON.stringify(detail || null) + '|' + stateKey;
+
+    let node = jobNodes[job.id];
+    if (!node) {
+      node = document.createElement('div');
+      node.className = 'job-block';
+      jobNodes[job.id] = node;
+    }
+    if (jobSigCache[job.id] !== sig) {
+      node.innerHTML = jobCardHtml(job, detail);
+      jobSigCache[job.id] = sig;
+    }
+    // keep DOM order matching the (server-sorted, newest-first) jobs array without recreating nodes
+    if (prevNode) {
+      if (prevNode.nextSibling !== node) jobsContainer.insertBefore(node, prevNode.nextSibling);
+    } else if (jobsContainer.firstChild !== node) {
+      jobsContainer.insertBefore(node, jobsContainer.firstChild);
+    }
+    prevNode = node;
+  }
+  for (const id of Object.keys(jobNodes)) {
+    if (!seen.has(id)) {
+      jobNodes[id].remove();
+      delete jobNodes[id];
+      delete jobSigCache[id];
+    }
+  }
+  document.querySelectorAll('.log-body').forEach(el => { el.scrollTop = el.scrollHeight; });
+}
+
+function jobMetaPhrase(job) {
+  const c = job.counts || {};
+  const bits = [];
+  if (c.CLEAN) bits.push(`${c.CLEAN} pass`);
+  if (c.REVIEW) bits.push(`${c.REVIEW} review`);
+  if (c.NEEDS_HUMAN) bits.push(`${c.NEEDS_HUMAN} needs you`);
+  if (c.REPORT) bits.push(`${c.REPORT} report only`);
+  if (c.error) bits.push(`${c.error} error`);
+  if (job.status === 'running') bits.push(`running (${c.running || 0} of ${job.total})`);
+  if (job.status === 'queued') bits.push('queued');
+  return bits.length ? bits.join(' \u00b7 ') : `${job.total} poster(s)`;
+}
+
+function jobCardHtml(job, detail) {
+  const isOpen = openJobs.has(job.id);
+  const srcLabel = job.source === 'folder' ? `folder batch \u00b7 ${job.total} poster(s)` : `${job.total} uploaded file(s)`;
+  const created = job.created ? new Date(job.created).toLocaleString() : '';
+  return `<div class="job-header" onclick="toggleJob('${job.id}')">
+      <div class="job-header-left">
+        <span class="job-title">${escapeHtml(srcLabel)}</span>
+        <span class="job-meta">${escapeHtml(created)} \u00b7 ${escapeHtml(jobMetaPhrase(job))} \u00b7 <span style="font-family:Consolas,monospace">${escapeHtml(job.id)}</span></span>
+      </div>
+      <div class="job-header-right">
+        ${(job.status !== 'queued' && job.status !== 'running') ? `<button class="btn alt" type="button" title="Move off the front page (files stay in jobs\_archive)" onclick="event.stopPropagation(); archiveJob('${job.id}')">Archive</button>` : ''}
+        <span class="chev">${isOpen ? '\u25be hide' : '\u25b8 show'}</span>
+      </div>
+    </div>
+    <div class="job-body">${isOpen ? jobBodyHtml(job, detail) : ''}</div>`;
+}
+
+function jobBodyHtml(job, detail) {
+  if (!detail) return '<div class="loading">Loading job detail\u2026</div>';
+  const posters = detail.posters || [];
+  const logOpen = openLogs.has(job.id);
+  const summaryUrl = `/jobs/${job.id}/out/QC_Summary.xlsx`;
+  const openPosterKeys = posters.filter(p => openPosters.has(job.id + ':' + p.sku));
+  return `
+    <div class="job-toolbar">
+      <a class="btn alt" href="${summaryUrl}" download onclick="event.stopPropagation()">Summary .xlsx</a>
+      <button class="btn alt" type="button" onclick="event.stopPropagation();copyText(this, ${JSON.stringify(job.dir || '')})">Copy job folder path</button>
+    </div>
+    <div class="poster-grid">
+      ${posters.length ? posters.map(p => posterCardHtml(job, p)).join('') : '<div class="empty">No posters in this job.</div>'}
+    </div>
+    ${openPosterKeys.map(p => posterDetailHtml(job, p, posters.indexOf(p))).join('')}
+    <div class="log-drawer">
+      <div class="log-head" onclick="toggleLog('${job.id}')"><b>Live log (${(detail.log || []).length} lines)</b><span class="chev">${logOpen ? '\u25be' : '\u25b8'}</span></div>
+      ${logOpen ? `<pre class="log-body">${escapeHtml((detail.log || []).join('\n')) || '(no log output yet)'}</pre>` : ''}
+    </div>`;
+}
+
+function posterCardHtml(job, poster) {
+  const key = job.id + ':' + poster.sku;
+  const res = poster.result;
+  const meta = statusMeta(poster.status);
+  let counts = `${statusMeta(poster.status).label === 'RUNNING' ? 'reading the poster\u2026' : 'waiting\u2026'}`;
+  if (res) {
+    const findings = res.findings || [];
+    const fixed = findings.filter(f => f.status === 'fixed').length;
+    const forYou = findings.filter(f => f.status === 'review' || f.status === 'needs_human' || f.status === 'open').length;
+    counts = `${findings.length} error(s) found \u00b7 ${fixed} fixed \u00b7 ${forYou} for you`;
+  }
+  const thumb = res && res.output_url
+    ? `<img src="${res.output_url}" alt="${escapeHtml(poster.sku)}">`
+    : `<div class="ph-box" style="background:${meta.dark}22"></div>`;
+  const reportBtn = res && res.report_url
+    ? `<a class="btn primary" style="padding:6px 14px;font-size:12px" href="${res.report_url}" onclick="event.stopPropagation()">View report</a>`
+    : `<span class="poster-link" style="color:${meta.dark}">Open report &rsaquo;</span>`;
+  return `<div class="poster-card" style="border-top:6px solid ${meta.accent}" onclick="togglePoster('${key}')">
+    <div class="poster-thumb" style="background:${meta.tint}">${thumb}</div>
+    <div class="poster-info">
+      <div class="poster-title" style="color:${meta.dark}">${escapeHtml(poster.filename)}</div>
+      <div class="poster-counts">${escapeHtml(counts)}</div>
+      ${poster.error ? `<div class="poster-error">${escapeHtml(poster.error)}</div>` : ''}
+      <div class="poster-foot">
+        ${pillHtml(poster.status, false)}
+        ${reportBtn}
+      </div>
+    </div>
+  </div>`;
+}
+
+function posterDetailHtml(job, poster, posterIndex) {
+  const key = job.id + ':' + poster.sku;
+  const meta = statusMeta(poster.status);
+  const res = poster.result;
+  const dims = res ? `${res.width}\u00d7${res.height} px` : '';
+  const findings = res ? (res.findings || []) : [];
+  const fixed = findings.filter(f => f.status === 'fixed').length;
+  const review = findings.filter(f => f.status === 'review').length;
+  const needsHuman = findings.filter(f => f.status === 'needs_human' || f.status === 'open').length;
+  const skipped = findings.filter(f => f.status === 'skipped').length;
+  const summarySub = res
+    ? `${escapeHtml(poster.sku)} \u00b7 ${dims} \u00b7 ${findings.length} finding(s): ${fixed} fixed, ${review} for review, ${needsHuman} for you${skipped ? `, ${skipped} noted` : ''}`
+    : escapeHtml(poster.sku);
+  let what = 'No result yet — this poster hasn\u2019t finished processing.';
+  if (res) {
+    if (!findings.length) {
+      what = 'Every word was read at zoom against the source content. Nothing looked wrong — no changes were made.';
+    } else {
+      const parts = [];
+      if (fixed) parts.push(`${fixed} misspelling(s)/inconsistenc(y/ies) were rebuilt from letters already on the poster, so the font, ink and paper grain match`);
+      if (review) parts.push(`${review} change(s) were made but are flagged for your review`);
+      if (needsHuman) parts.push(`${needsHuman} finding(s) need a human hand — nothing was guessed at`);
+      if (skipped) parts.push(`${skipped} note(s) were left as-is (facts/layout aren't auto-edited)`);
+      what = 'Every word was read at zoom. ' + parts.join('; ') + '. Nothing else on the page was touched.';
+    }
+  }
+  const actions = [];
+  actions.push(`<button class="btn on-dark ghost" onclick="event.stopPropagation(); closePoster('${key}')">&larr; Back</button>`);
+  if (poster.status === 'CLEAN' || poster.status === 'REVIEW') {
+    const done = poster.approved_to ? ` title="saved to ${escapeHtml(poster.approved_to)}"` : '';
+    actions.push(`<button class="btn on-dark" style="color:${meta.dark}"${done} onclick="event.stopPropagation(); approvePoster('${job.id}', ${posterIndex})">${poster.approved_to ? 'Saved ✓ (save again)' : 'Approve &amp; save'}</button>`);
+  }
+  if (res && res.output_url) actions.push(`<a class="btn on-dark" style="color:${meta.dark}" href="${res.output_url}" download onclick="event.stopPropagation()">Download fixed PNG</a>`);
+  if (res && res.print_url) actions.push(`<a class="btn on-dark ghost" href="${res.print_url}" download onclick="event.stopPropagation()">Download print PDF</a>`);
+  if (res && res.report_url) actions.push(`<a class="btn on-dark ghost" href="${res.report_url}" onclick="event.stopPropagation()">Full report</a>`);
+  const fixedImg = res && (res.changes_url || res.output_url);
+  const twoUp = `<div class="detail-thumb two-up" style="background:${meta.tint}">
+      <div class="two-up-col">
+        <div class="two-up-label">Original</div>
+        ${poster.original_url
+          ? `<a href="${poster.original_url}" target="_blank"><img src="${poster.original_url}" alt="original"></a>`
+          : `<div class="ph-box" style="background:${meta.dark}22"></div>`}
+      </div>
+      <div class="two-up-col">
+        <div class="two-up-label">Fixed</div>
+        ${fixedImg
+          ? `<a href="${fixedImg}" target="_blank"><img src="${fixedImg}" alt="fixed"></a>`
+          : `<div class="ph-box" style="background:${meta.dark}22"></div>`}
+      </div>
+    </div>`;
+  return `<div class="detail-panel" id="detail-${idKey(key)}">
+    <div class="detail-head" style="background:linear-gradient(135deg,${meta.accent},${meta.dark})">
+      <div class="detail-head-left">
+        <div class="dt">${escapeHtml(poster.filename)} \u00b7 ${escapeHtml(meta.label)}</div>
+        <div class="ds">${summarySub}</div>
+      </div>
+      <div class="detail-actions">${actions.join('')}</div>
+    </div>
+    <div class="detail-body">
+      ${res && res.print_check && res.print_check.size ? `<div style="margin-bottom:14px;padding:10px 14px;border-radius:10px;background:${(res.print_check.ok && res.print_check.dpi >= 150) ? '#eaf6ef' : '#fbf3e4'};border-left:6px solid ${(res.print_check.ok && res.print_check.dpi >= 150) ? '#1f7a4d' : '#b9822a'};font-size:13.5px"><b>Print check: ${escapeHtml(res.print_check.size)} ${escapeHtml(res.print_check.orientation || '')}</b> &middot; ${escapeHtml(res.print_check.note || '')}</div>` : ''}
+      ${res && res.handoff && res.handoff.count ? `<div class="hfbox" style="margin-bottom:16px"><div class="hfrow"><b>Fix by hand \u00b7 ${res.handoff.count} item(s)</b></div>
+        <div style="font-size:12.5px;color:#555;margin:4px 0 10px">${escapeHtml(res.handoff.how)}</div>
+        <div class="hfrow"><b>ChatGPT prompt</b> <button class="copybtn" type="button" onclick="copyText(this, ${JSON.stringify(res.handoff.chatgpt)})">Copy</button></div>
+        <code>${escapeHtml(res.handoff.chatgpt)}</code>
+        <div class="hfrow" style="margin-top:10px"><b>Higgsfield prompt</b> <button class="copybtn" type="button" onclick="copyText(this, ${JSON.stringify(res.handoff.higgsfield)})">Copy</button></div>
+        <code>${escapeHtml(res.handoff.higgsfield)}</code></div>` : ''}
+      <div class="detail-left">
+        ${twoUp}
+        <div class="detail-section">
+          <div class="detail-section-label" style="color:${meta.dark};border-color:${meta.tint}">What happened</div>
+          <div class="detail-what">${escapeHtml(what)}</div>
+        </div>
+      </div>
+      <div class="detail-right">
+        <div class="detail-section">
+          <div class="detail-section-label" style="color:${meta.dark};border-color:${meta.tint}">Findings</div>
+          ${findingsTableHtml(job.id, findings)}
+        </div>
+        ${res ? applyPanelHtml(job.id, poster, posterIndex) : ''}
+        ${factsTableHtml(meta, res ? res.facts : [])}
+      </div>
+    </div>
+  </div>`;
+}
+
+function applyPanelHtml(jobId, poster, posterIndex) {
+  const key = jobId + ':' + poster.sku;
+  const ik = idKey(key);
+  return `<div class="detail-section">
+    <div class="detail-section-label">Choose &amp; apply changes</div>
+    <div class="hint">Tick the changes to make, edit "Should be" if needed, or add your own below \u2014 then apply. This starts a new run using exactly what you chose.</div>
+    <div class="add-change-row">
+      <input type="text" class="box-input" id="custom-wrong-${ik}" placeholder="Find this text on the poster">
+      <span class="arrow">&rarr;</span>
+      <input type="text" class="box-input" id="custom-replace-${ik}" placeholder="Replace with">
+      <button class="btn alt" type="button" onclick="addCustomChange('${jobId}','${poster.sku}')">+ Add</button>
+    </div>
+    <div class="custom-change-list" id="custom-list-${ik}">${customListHtml(jobId, poster.sku)}</div>
+    <div class="apply-row">
+      <button class="btn primary" type="button" id="apply-btn-${ik}" onclick="applyChanges('${jobId}','${poster.sku}',${posterIndex})">Apply selected changes</button>
+      <span class="run-status" id="apply-status-${ik}" style="color:var(--muted)"></span>
+    </div>
+  </div>`;
+}
+
+function customListHtml(jobId, sku) {
+  const key = jobId + ':' + sku;
+  const custom = customChanges[key] || [];
+  if (!custom.length) return '';
+  return custom.map((c, i) => `<span class="custom-change-chip">
+      <b>${escapeHtml(c.wrong)}</b> &rarr; <b>${escapeHtml(c.right)}</b>
+      <button type="button" onclick="removeCustomChange('${jobId}','${sku}',${i})">&times;</button>
+    </span>`).join('');
+}
+
+function addCustomChange(jobId, sku) {
+  const key = jobId + ':' + sku;
+  const ik = idKey(key);
+  const wrongEl = document.getElementById('custom-wrong-' + ik);
+  const rightEl = document.getElementById('custom-replace-' + ik);
+  if (!wrongEl || !rightEl) return;
+  const wrong = wrongEl.value.trim();
+  const right = rightEl.value.trim();
+  if (!wrong || !right) return;
+  if (!customChanges[key]) customChanges[key] = [];
+  customChanges[key].push({wrong, right});
+  wrongEl.value = ''; rightEl.value = '';
+  const list = document.getElementById('custom-list-' + ik);
+  if (list) list.innerHTML = customListHtml(jobId, sku);
+}
+
+function removeCustomChange(jobId, sku, i) {
+  const key = jobId + ':' + sku;
+  (customChanges[key] || []).splice(i, 1);
+  const list = document.getElementById('custom-list-' + idKey(key));
+  if (list) list.innerHTML = customListHtml(jobId, sku);
+}
+
+async function applyChanges(jobId, sku, posterIndex) {
+  const key = jobId + ':' + sku;
+  const ik = idKey(key);
+  const statusEl = document.getElementById('apply-status-' + ik);
+  const btn = document.getElementById('apply-btn-' + ik);
+  const panel = document.getElementById('detail-' + ik);
+  const changes = [];
+  if (panel) {
+    panel.querySelectorAll('.apply-check').forEach(cb => {
+      if (!cb.checked) return;
+      const fid = cb.getAttribute('data-finding-id');
+      const input = panel.querySelector('.right-input[data-finding-id="' + fid + '"]');
+      const right = input ? input.value.trim() : '';
+      const wrong = input ? input.getAttribute('data-wrong') : '';
+      if (right) changes.push({finding_id: fid, wrong, right});
+    });
+  }
+  (customChanges[key] || []).forEach(c => changes.push({finding_id: null, wrong: c.wrong, right: c.right}));
+  if (!changes.length) {
+    if (statusEl) statusEl.textContent = 'Select or add at least one change first.';
+    return;
+  }
+  if (btn) btn.disabled = true;
+  if (statusEl) statusEl.textContent = 'Applying\u2026';
+  try {
+    const resp = await fetch(`/api/jobs/${encodeURIComponent(jobId)}/posters/${posterIndex}/apply`, {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({changes, fix: true})
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.detail || 'apply failed');
+    customChanges[key] = [];
+    openJobs.add(data.job_id);
+    await pollOnce();
+    const node = jobNodes[data.job_id];
+    if (node && node.scrollIntoView) node.scrollIntoView({behavior: 'smooth', block: 'start'});
+    if (statusEl) statusEl.textContent = `Applying now in job ${data.job_id}.`;
+  } catch (e) {
+    if (statusEl) statusEl.textContent = 'Error: ' + e.message;
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function factsTableHtml(meta, facts) {
+  facts = facts || [];
+  if (!facts.length) return '';
+  const ok = facts.filter(x => x.verdict === 'ok').length;
+  const doubtful = facts.filter(x => x.verdict === 'doubtful').length;
+  const wrong = facts.filter(x => x.verdict === 'wrong').length;
+  const bits = [`${facts.length} facts checked`, `${ok} OK`];
+  if (doubtful) bits.push(`${doubtful} doubtful`);
+  if (wrong) bits.push(`${wrong} wrong`);
+  const colors = {ok: '#1f7a4d', doubtful: '#b9822a', wrong: '#b03a3a'};
+  const rows = facts.map(x => {
+    const c = colors[x.verdict] || colors.doubtful;
+    return `<tr>
+      <td>${escapeHtml(x.claim || '')}</td>
+      <td>${escapeHtml(x.box_name || '')}</td>
+      <td><span class="pill mini" style="background:${c}">${escapeHtml((x.verdict || '').toUpperCase())}</span></td>
+      <td>${escapeHtml(x.why || '')}</td>
+    </tr>`;
+  }).join('');
+  return `<div class="detail-section">
+    <div class="detail-section-label" style="color:${meta.dark};border-color:${meta.tint}">Facts checked</div>
+    <div style="font-size:12.5px;color:var(--muted)">${bits.join(' \u00b7 ')}</div>
+    <table class="findings">
+      <thead><tr><th>Claim</th><th>Where</th><th>Verdict</th><th>Why</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </div>`;
+}
+
+function findingsTableHtml(jobId, findings) {
+  if (!findings.length) return '<div class="no-findings">No findings — nothing looked wrong.</div>';
+  const rows = findings.map(f => findingRowHtml(jobId, f)).join('');
+  return `<table class="findings">
+    <thead><tr><th></th><th></th><th>Where</th><th>Found</th><th>Should be</th><th>Type</th><th>Result</th></tr></thead>
+    <tbody>${rows}</tbody></table>`;
+}
+
+function findingRowHtml(jobId, f) {
+  const key = jobId + ':' + f.id;
+  const open = openFindings.has(key);
+  const hasAttempts = (f.attempts || []).length > 0;
+  const toggle = hasAttempts ? `<span class="fexp" onclick="toggleFinding('${key}')">${open ? '▾' : '▸'}</span>` : '';
+  const plain = f.status === 'skipped';
+  const wrongColor = plain ? '#666' : '#b03a3a';
+  const rightColor = plain ? '#666' : statusMeta(f.status === 'fixed' ? 'CLEAN' : f.status === 'review' ? 'REVIEW' : 'NEEDS_HUMAN').dark;
+  const p = findingPill(f);
+  // Review mode: every not-yet-fixed finding gets a checkbox (checked by default unless it was
+  // skipped) and an editable "Should be" box, so the owner can pick and tweak what gets applied.
+  const editable = f.status !== 'fixed';
+  const checkedDefault = editable && f.status !== 'skipped';
+  const checkbox = editable
+    ? `<input type="checkbox" class="apply-check" data-finding-id="${escapeHtml(f.id)}" ${checkedDefault ? 'checked' : ''} onclick="event.stopPropagation()">`
+    : '';
+  const rightCell = editable
+    ? `<input type="text" class="box-input right-input" data-finding-id="${escapeHtml(f.id)}" data-wrong="${escapeHtml(f.wrong)}" value="${escapeHtml(f.right)}" onclick="event.stopPropagation()">`
+    : escapeHtml(f.right);
+  let attemptsRow = '';
+  if (open && hasAttempts) {
+    attemptsRow = `<tr class="attempts-row"><td colspan="7">${attemptsHtml(f)}</td></tr>`;
+  }
+  return `<tr>
+    <td>${checkbox}</td>
+    <td>${toggle}</td>
+    <td>${escapeHtml(f.box_name)}</td>
+    <td class="fword wrong" style="color:${wrongColor}">${escapeHtml(f.wrong)}</td>
+    <td class="fword right" style="color:${rightColor}">${rightCell}</td>
+    <td class="fkind">${escapeHtml(f.kind)} · ${Math.round((f.confidence || 0) * 100)}%</td>
+    <td><span class="pill mini" style="background:${p.bg};color:${p.color}">${escapeHtml(p.label)}</span></td>
+  </tr>${attemptsRow}`;
+}
+
+function attemptsHtml(f) {
+  return (f.attempts || []).map(a => {
+    const crops = (a.before_crop_url || a.after_crop_url) ? `<div class="crops">
+        ${a.before_crop_url ? `<a class="crop-item" href="${a.before_crop_url}" target="_blank"><img src="${a.before_crop_url}" alt="before"><span class="cap">before</span></a>` : ''}
+        ${a.after_crop_url ? `<a class="crop-item after" href="${a.after_crop_url}" target="_blank"><img src="${a.after_crop_url}" alt="after"><span class="cap">after \u00b7 ${escapeHtml(f.right)}</span></a>` : ''}
+      </div>` : '';
+    const hf = a.backend === 'higgsfield' && a.prompt ? `<div class="hfbox"><div class="hfrow"><b>Higgsfield prompt</b>
+        <button class="copybtn" type="button" onclick="copyText(this, ${JSON.stringify(a.prompt)})">Copy</button></div>
+        <code>${escapeHtml(a.prompt)}</code></div>` : '';
+    return `<div class="attempt ${a.passed ? 'pass' : 'fail'}">
+      <div class="attempt-head">round ${a.round} &middot; <b>${escapeHtml(a.backend)}</b> &middot; style ${a.style_score} &middot; ${a.passed ? 'PASS' : 'FAIL'}</div>
+      ${a.read_back ? `<div class="attempt-read">read back: &ldquo;${escapeHtml(a.read_back)}&rdquo;</div>` : ''}
+      ${a.note ? `<div class="attempt-note">${escapeHtml(a.note)}</div>` : ''}
+      ${crops}
+      ${hf}
+    </div>`;
+  }).join('');
+}
+</script>
+</body>
+</html>
