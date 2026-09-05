@@ -4847,8 +4847,11 @@ const SETTINGS = { box_cap_oz:800, box_stack_in:10, weights:{
 const norm = s => (s||'').toUpperCase().replace(/[_\s]+/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'');
 function sizeOf(sku,meta){const m=/(8\.5x11|17x11|11x17)/i.exec(meta||'');if(m)return m[1].toLowerCase()==='17x11'?'11x17':m[1].toLowerCase();const s=(sku||'').toUpperCase();if(s.startsWith('JBG-BIN')||s.startsWith('JBG-CC')||s.includes('-85X11')||s.includes('8.5X11'))return '8.5x11';return '11x17';}
 function sheetsOf(sku){const s=(sku||'').toUpperCase();let m;if((m=/(\d+)\s*PK/.exec(s)))return +m[1];if((m=/(\d+)\s*SET/.exec(s)))return +m[1];if((m=/(\d+)\s*PACK/.exec(s)))return +m[1];if((m=/COMPLETE-?(\d+)/.exec(s)))return +m[1];if((m=/(\d+)\s*PC\b/.exec(s)))return +m[1];if((m=/(\d+)-?POSTER/.exec(s)))return +m[1];if(/_6PK|6-PACK|VITALS_6PK/.test(s))return 6;if(/MASTER|BUNDLE|BASE/.test(s))return 6;return 1;}
-// a bundle must print from a multi-poster master file, not a single poster
-function isBundleFile(pdf){return /master|bundle|pack|complete|_all|[0-9]+pk|[0-9]+set|[0-9]+pc\b/i.test(pdf||'');}
+// a bundle must print from a multi-poster master file, not a single poster.
+// Check only the filename, not the full path — source folders are often named
+// things like "Safety Health Bundle" or "...Complete" for organizational reasons
+// unrelated to whether THIS file is actually a multi-poster master.
+function isBundleFile(pdf){const base=(pdf||'').split('/').pop();return /master|bundle|pack|complete|_all|[0-9]+pk|[0-9]+set|[0-9]+pc\b/i.test(base);}
 // superseded / retired products
 function isOld(p){return !!p && /\bOLD\b|not in use|retired|superseded/i.test((p.title||'')+' '+(p.sku||''));}
 // bundle if the dashboard tagged it, or the SKU/file says so
