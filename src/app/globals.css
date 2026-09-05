@@ -1,0 +1,143 @@
+@import 'tailwindcss';
+
+/*
+ * Design tokens.
+ *
+ * Ported from the two competing :root blocks in the legacy index.html: a light
+ * theme at line 7 that was then almost entirely repainted by a black theme at
+ * line 133. Only the black theme was ever visible, so only the black theme is
+ * here.
+ *
+ * Deliberately NOT ported: the `.btn:nth-of-type(7n+k) { … !important }` colour
+ * cycle at lines 512-518 and the nav equivalent at 525-532. Colour-by-position
+ * meant inserting one button re-coloured every button after it. Buttons now take
+ * an explicit `tone`, and nav items carry their brand colour as data.
+ */
+@theme {
+  /* --- Surfaces --- */
+  --color-bg: #0b0c0f;
+  --color-panel: #15171c;
+  --color-panel-2: #1c1f26;
+  --color-line: #2a2e37;
+  --color-line-strong: #3a404c;
+
+  /* --- Text --- */
+  --color-ink: #eef1f5;
+  --color-ink-bright: #ffffff;
+  --color-muted: #98a2b3;
+  --color-muted-dim: #6b7686;
+
+  /* --- Brand accent (the mint used for nav-active, chips, positive counts) --- */
+  --color-mint: #4ecf9a;
+  --color-mint-dark: #22c07a;
+  --color-mint-ink: #04160e;
+  --color-gold: #e6b34d;
+
+  /* --- JBG logo palette. Was the nth-of-type cycle; now semantic tones. --- */
+  --color-jbg-blue: #2b7ad6;
+  --color-jbg-pink: #e84c8a;
+  --color-jbg-orange: #f0821e;
+  --color-jbg-purple: #7a49c0;
+  --color-jbg-green: #159a58;
+  --color-jbg-gold: #d29400;
+  --color-jbg-teal: #159e93;
+  --color-jbg-red: #e03b3b;
+
+  /* --- Status. Were hard-coded literals scattered across ~40 rules. --- */
+  --color-success-bg: #12351f;
+  --color-success-fg: #5fd88f;
+  --color-warn-bg: #3a2f14;
+  --color-warn-fg: #e6c072;
+  --color-danger-bg: #3a1a18;
+  --color-danger-fg: #ff8f8a;
+  --color-info-bg: #122a44;
+  --color-info-fg: #7fb2e8;
+
+  /* --- Radius. The original used 12 distinct literal px values. --- */
+  --radius-xs: 6px;
+  --radius-sm: 9px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 22px;
+  --radius-pill: 999px;
+
+  /* --- Elevation --- */
+  --shadow-panel: 0 2px 14px rgb(0 0 0 / 0.45);
+  --shadow-raised: 0 3px 8px rgb(0 0 0 / 0.3);
+  --shadow-hover: 0 7px 16px rgb(0 0 0 / 0.34);
+  --shadow-modal: 0 6px 26px rgb(0 0 0 / 0.55);
+
+  /* --- Type --- */
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+
+  /* --- Layout --- */
+  --container-shell: 1120px;
+}
+
+/*
+ * iPad is the primary packing device. 16px is the threshold below which iOS
+ * zooms the viewport on focus, and the packer screen is used one-handed while
+ * holding a box, so its controls are deliberately larger than the desktop ones.
+ */
+@theme {
+  --text-touch: 16px;
+  --spacing-touch: 44px;
+}
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    margin: 0;
+    font-family: var(--font-sans);
+    color: var(--color-ink);
+    background:
+      radial-gradient(1200px 600px at 70% -100px, #15181f 0, var(--color-bg) 60%) fixed,
+      var(--color-bg);
+    min-height: 100dvh;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* iOS zooms any input whose font-size is under 16px. */
+  input,
+  select,
+  textarea,
+  button {
+    font: inherit;
+    font-size: var(--text-touch);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-mint);
+    outline-offset: 2px;
+  }
+
+  code,
+  kbd,
+  samp {
+    font-family: var(--font-mono);
+  }
+}
+
+@layer utilities {
+  /* Wide tables (register, wholesale, print queue) scroll inside their own
+     container rather than making the page scroll sideways on an iPad. */
+  .scroll-x {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/*
+ * The only media query in the original 600-rule stylesheet was @media print,
+ * used by the two window.open'd documents. Those are real routes now
+ * (src/app/print/*) and carry their own print CSS, so nothing survives here.
+ */

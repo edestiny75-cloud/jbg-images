@@ -1,9 +1,9 @@
 # ============================================================
 #  JBG Fiery Agent  (drops files into the Fiery HOT FOLDER)
-#  Watches the app's print queue (Supabase "print_jobs"), downloads
-#  each POSTER print file, and drops it into your Fiery "JBG Hold"
-#  hot folder. The Fiery Hot Folders app imports it natively to the
-#  Held queue - clean pages, content, and media every time.
+#  Claims POSTER print jobs from the fulfillment app, downloads each
+#  print file, and drops it into your Fiery "JBG Hold" hot folder. The
+#  Fiery Hot Folders app imports it natively to the Held queue - clean
+#  pages, content, and media every time.
 #
 #  FNSKU label jobs are ignored here - those go to your label printer.
 #
@@ -56,13 +56,22 @@ $FIERY_MEDIA_BY_SIZE = @{
   "8.5x11" = @{ EFMediaType = "Heavy4";           EFMediaWeight = "257_300"; InputSlot = "Tray3" }
 }
 
-# ---- Where the real print files live (same as the app) ----
-$GCS_PRINTS = "https://storage.googleapis.com/jbg-print-files-2026/"
-$FN_BASE    = "storage/v1/object/public/prints/"
-
-# ---- Supabase (same project as the app; read + mark-done) ----
-$SB_URL = "https://ajwzfhddyhkdoosomuaz.supabase.co"
-$SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFqd3pmaGRkeWhrZG9vc29tdWF6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY0MDk4MDMsImV4cCI6MjEwMTk4NTgwM30.BI60gwH9e8qN_Sm5zBqqOkNGPdeN2QRJy-pZCa9mxZ4"
+# ---- The app (hands out work, takes the result back) ----
+#   This used to be the Supabase URL and the project's anon key, pasted straight
+#   into this file - a key that granted full read/write on EVERY table in the
+#   database, to a script whose job is to copy a PDF into a folder. It is in this
+#   file's git history and is being rotated.
+#
+#   Now the agent asks the app for work and tells the app what happened, over two
+#   endpoints, with a token that is good for nothing else. The token is not in
+#   this file: it is typed in once and saved encrypted to this Windows login,
+#   the same way the Fiery password already is.
+#
+#   Where the print files live is no longer configured here either - the app
+#   sends a finished URL with each job. That base URL used to be written down in
+#   two places (here and in the app), which meant it could drift in one of them.
+$APP_URL    = if ($env:JBG_APP_URL)    { $env:JBG_APP_URL.TrimEnd('/') } else { "https://CHANGE-ME.example.com" }
+$AGENT_NAME = if ($env:JBG_AGENT_NAME) { $env:JBG_AGENT_NAME }          else { $env:COMPUTERNAME }
 # ------------------------------------------------------------
 
 $ROOT      = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -71,7 +80,7 @@ $FALLBACK  = Join-Path $ROOT "_Fiery_Exports"
 $TEMP      = Join-Path $ROOT "_Fiery_Temp"
 $QPDF      = Join-Path $ROOT "qpdf\qpdf.exe"   # tiny PDF tool that builds the copy count into the file
 New-Item -ItemType Directory -Force -Path $TEMP | Out-Null
-$headers   = @{ apikey = $SB_KEY; Authorization = "Bearer $SB_KEY" }
+# $script:AppHeaders is built once the agent token has been loaded, below.
 
 # ---- Run logging (for debugging) -------------------------------------------
 #  Every line the agent prints is ALSO appended, with a timestamp, to a dated
@@ -455,6 +464,51 @@ function Load-FieryCredentials {
   }
 }
 
+$AgentTokenFile = Join-Path $ROOT "jbg_agent_token.xml"
+
+# Stored exactly like the Fiery credentials above - Export-Clixml runs the
+# SecureString through Windows DPAPI, so the file on disk is ciphertext tied to
+# THIS Windows login on THIS machine and is useless if copied elsewhere. Delete
+# it to be asked for the token again.
+function Save-AgentToken($secureToken) {
+  try {
+    [PSCustomObject]@{ Token = ($secureToken | ConvertFrom-SecureString) } | Export-Clixml -LiteralPath $AgentTokenFile
+  } catch { Emit "  ! couldn't save the agent token to disk: $($_.Exception.Message)" -ForegroundColor Yellow }
+}
+
+function Load-AgentToken {
+  # An environment variable wins, so a test run can point at a dev machine
+  # without disturbing the saved production token.
+  if ($env:JBG_AGENT_TOKEN) { return (ConvertTo-SecureString $env:JBG_AGENT_TOKEN -AsPlainText -Force) }
+  if (-not (Test-Path -LiteralPath $AgentTokenFile)) { return $null }
+  try {
+    return ((Import-Clixml -LiteralPath $AgentTokenFile).Token | ConvertTo-SecureString)
+  } catch {
+    Emit "  ! the saved agent token couldn't be read (moved to a different PC/login?) - will re-prompt." -ForegroundColor Yellow
+    return $null
+  }
+}
+
+# Tell the app what became of a job this agent claimed. One of:
+#   done     - the file is in the hot folder
+#   error    - it cannot be printed; the message is shown on the Print Jobs screen
+#   requeue  - not this agent's fault, put it back for the next poll
+#
+# Each report is wrapped on its own. The old code let a failed PATCH throw into
+# the loop's outer catch, which abandoned every remaining job in that batch.
+function Complete-Job($id, $outcome, $message) {
+  $body = @{ agent = $AGENT_NAME; outcome = $outcome }
+  if ($message) { $body["message"] = $message }
+  try {
+    Invoke-RestMethod -Uri "$APP_URL/api/print-jobs/$id/complete" -Headers $script:AppHeaders `
+      -Method Post -ContentType "application/json" -Body ($body | ConvertTo-Json -Compress) -TimeoutSec 30 | Out-Null
+    return $true
+  } catch {
+    Emit "  ! couldn't tell the app that job $id was '$outcome': $($_.Exception.Message)" -ForegroundColor Yellow
+    return $false
+  }
+}
+
 if ($FIERY_API_ENABLED) {
   Emit ""
   $saved = Load-FieryCredentials
@@ -486,6 +540,61 @@ if ($FIERY_API_ENABLED) {
 }
 # ================================================================================
 
+# ================================================================================
+#  The app connection. Checked HERE, at startup, rather than discovered later:
+#  a wrong address or a bad token means nothing prints, and the failure a shop
+#  floor notices is "the printer stopped", hours after the cause.
+# ================================================================================
+if ($APP_URL -like "*CHANGE-ME*") {
+  Emit ""
+  Emit "  ! The app address hasn't been set." -ForegroundColor Red
+  Emit "    Edit \$APP_URL near the top of this file (or set JBG_APP_URL) and run this again." -ForegroundColor Red
+  Read-Host "  Press Enter to close"
+  exit 1
+}
+
+$script:AgentToken = Load-AgentToken
+if (-not $script:AgentToken) {
+  Emit ""
+  Emit "  This agent needs its print token - ask whoever runs the app for it." -ForegroundColor Cyan
+  Emit "  Copy it, then press Enter here. It is saved encrypted to your Windows login, so you are only asked once." -ForegroundColor Cyan
+  $script:AgentToken = Read-SecretFromClipboard "print agent token"
+  if (-not $script:AgentToken) {
+    Emit "  ! no token - nothing can be claimed, so nothing would print. Stopping." -ForegroundColor Red
+    Read-Host "  Press Enter to close"
+    exit 1
+  }
+  Save-AgentToken $script:AgentToken
+}
+
+# Not the Marshal::PtrToStringAuto idiom Connect-Fiery uses a few functions up:
+# "Auto" resolves to the ANSI reader outside Windows, which truncates a BSTR at
+# its first null byte and yields a one-character token. That difference cannot
+# show up on the shop floor, but it does make this line impossible to test
+# anywhere else, and this line is the one that decides whether anything prints.
+$script:AppHeaders = @{
+  Authorization = "Bearer " + [System.Net.NetworkCredential]::new('', $script:AgentToken).Password
+}
+
+# A read-only probe: it reports what is waiting without claiming any of it, so
+# a bad token is a loud message on line one instead of an empty poll forever.
+try {
+  $hello = Invoke-RestMethod -Uri "$APP_URL/api/print-jobs/claim" -Headers $script:AppHeaders -Method Get -TimeoutSec 20
+  Emit ""
+  Emit ("  Connected to {0} as '{1}' - {2} job(s) waiting." -f $APP_URL, $AGENT_NAME, $hello.queued) -ForegroundColor Green
+} catch {
+  $code = try { [int]$_.Exception.Response.StatusCode } catch { 0 }
+  Emit ""
+  if ($code -eq 401) {
+    Emit "  ! The app rejected this agent's token." -ForegroundColor Red
+    Emit "    Delete jbg_agent_token.xml next to this script and run again to enter a new one." -ForegroundColor Red
+  } else {
+    Emit ("  ! Couldn't reach the app at {0}: {1}" -f $APP_URL, $_.Exception.Message) -ForegroundColor Red
+  }
+  Read-Host "  Press Enter to close"
+  exit 1
+}
+
 Emit ""
 Emit "  JBG Fiery Agent (HOT FOLDER) - polling every $POLL_SECONDS s." -ForegroundColor Green
 Emit "  Dropping poster prints into: $HOTFOLDER" -ForegroundColor DarkGray
@@ -500,25 +609,27 @@ Emit ""
 
 while ($true) {
   try {
-    # Only the Fiery's own jobs (poster print files). FNSKU label jobs are NOT pulled here.
-    $jobs = Invoke-RestMethod -Uri "$SB_URL/rest/v1/print_jobs?status=eq.queued&or=(type.eq.fiery,type.is.null)&order=created_at.asc&limit=25" -Headers $headers -Method Get
-    foreach ($j in $jobs) {
-      $size   = if ($j.size) { "$($j.size)" } else { "11x17" }
-      $copies = [int]$j.copies; if ($copies -lt 1) { $copies = 1 }; if ($copies -gt 999) { $copies = 999 }
-      $url    = "$($j.file_path)"
-      $sku    = "$($j.product_sku)"
+    # CLAIM the Fiery's own jobs (poster print files). FNSKU label jobs stay in
+    # their own queue for the label printer and are not claimed here.
+    #
+    # Claiming, rather than the old read-and-hope: the previous version listed
+    # everything still marked 'queued' and only marked a row 'done' after the
+    # file had downloaded and copied. Anything slower than one poll interval was
+    # therefore picked up AGAIN on the next tick and printed twice. The app now
+    # hands each job to one agent and will not offer it to anyone else.
+    $claimBody = @{ agent = $AGENT_NAME; limit = 25; type = "fiery" } | ConvertTo-Json -Compress
+    $claimed = Invoke-RestMethod -Uri "$APP_URL/api/print-jobs/claim" -Headers $script:AppHeaders `
+      -Method Post -ContentType "application/json" -Body $claimBody -TimeoutSec 30
+    foreach ($j in $claimed.jobs) {
+      # The app has already settled all of this: the size (from the catalog, not
+      # guessed here), the copy count, and a finished download URL. The block
+      # that used to rebuild cloud URLs from the SKU is gone with it - that was
+      # this script's copy of a base URL the app also held.
+      $size   = "$($j.size)"
+      $copies = [int]$j.copies
+      $url    = "$($j.fileUrl)"
+      $sku    = "$($j.sku)"
       $type   = "$($j.type)"
-
-      # If the stored path isn't a web link (old local path, or blank), rebuild the real cloud URL from the SKU.
-      if ($url -notmatch '^https?://') {
-        if (-not [string]::IsNullOrWhiteSpace($sku)) {
-          if ($type -eq 'fnsku') { $url = "$SB_URL/$FN_BASE" + [uri]::EscapeDataString($sku) + "_FN.pdf" }
-          else                   { $url = "$GCS_PRINTS" + [uri]::EscapeDataString($sku) + ".pdf" }
-        } else {
-          Invoke-RestMethod -Uri "$SB_URL/rest/v1/print_jobs?id=eq.$($j.id)" -Headers $headers -Method Patch -ContentType "application/json" -Body '{"status":"error"}' | Out-Null
-          Emit "  ! job $($j.id) has no file and no SKU - skipped" -ForegroundColor Yellow; continue
-        }
-      }
 
       # download the file to a temp spot first
       $ext = [IO.Path]::GetExtension(($url -split '\?')[0]); if (-not $ext) { $ext = ".pdf" }
@@ -526,8 +637,26 @@ while ($true) {
       $tmp  = Join-Path $TEMP ("dl_{0}{1}" -f $safe, $ext)
       try { Invoke-WebRequest -Uri $url -OutFile $tmp -UseBasicParsing -TimeoutSec 180 }
       catch {
-        Invoke-RestMethod -Uri "$SB_URL/rest/v1/print_jobs?id=eq.$($j.id)" -Headers $headers -Method Patch -ContentType "application/json" -Body '{"status":"error"}' | Out-Null
+        Complete-Job $j.id "error" "Print file could not be downloaded." | Out-Null
         Emit "  ! download failed for job $($j.id): $url" -ForegroundColor Red; continue
+      }
+
+      # Is it actually a print file? A URL that answers 200 with something else -
+      # a login page at the end of a redirect, a proxy interstitial, an error
+      # document - used to be copied into the hot folder under a .pdf name and
+      # then fail at the Fiery, which is a slower and far more confusing way to
+      # find out. Seen for real while testing this: an unauthenticated URL
+      # redirected to a login page and 15 KB of HTML landed in the hot folder.
+      $head = [byte[]]::new(5)
+      $read = 0
+      try {
+        $fs = [IO.File]::OpenRead($tmp)
+        try { $read = $fs.Read($head, 0, 5) } finally { $fs.Dispose() }
+      } catch { $read = 0 }
+      if ($read -lt 5 -or [Text.Encoding]::ASCII.GetString($head) -ne '%PDF-') {
+        Complete-Job $j.id "error" "That link did not return a PDF." | Out-Null
+        Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
+        Emit "  ! job $($j.id): not a PDF - $url" -ForegroundColor Red; continue
       }
 
       # copies: duplicate pages (default, but only for 1-2 page sources - see note above),
@@ -554,7 +683,7 @@ while ($true) {
         if (Test-Path $dest) { $n = "{0:000}" -f (Get-Random -Minimum 1 -Maximum 999); $dest = Join-Path $HOTFOLDER ($base + " " + $n + $ext) }
         try {
           Copy-Item -LiteralPath $drop -Destination $dest -Force
-          Invoke-RestMethod -Uri "$SB_URL/rest/v1/print_jobs?id=eq.$($j.id)" -Headers $headers -Method Patch -ContentType "application/json" -Body '{"status":"done"}' | Out-Null
+          Complete-Job $j.id "done" $null | Out-Null
           Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
           if ($builtCopies) { Remove-Item -LiteralPath $drop -Force -ErrorAction SilentlyContinue }
 
@@ -589,18 +718,34 @@ while ($true) {
           $note = if ($mediaNote) { "$copiesNote, $mediaNote" } else { $copiesNote }
           Emit ("  -> HELD  {0}  [{1}]  ({2})" -f $safe, $size, $note) -ForegroundColor Cyan
         } catch {
+          # Hand it back so the next poll picks it up. Under the old read-only
+          # poll this needed no action: the row was simply never marked done and
+          # stayed 'queued'. A claimed row is not queued, so silence here would
+          # park the job until the stale-claim sweep noticed it.
+          Complete-Job $j.id "requeue" $null | Out-Null
           Emit ("  ! could not write to hot folder - will retry: {0}" -f $_.Exception.Message) -ForegroundColor Yellow
         }
       } else {
-        # hot folder missing - keep the file so nothing is lost, leave the job queued to retry
+        # hot folder missing - keep the file so nothing is lost, hand the job back
         $dp = Join-Path $FALLBACK $size; New-Item -ItemType Directory -Force -Path $dp | Out-Null
         Copy-Item -LiteralPath $drop -Destination (Join-Path $dp ($base + $ext)) -Force
         if ($builtCopies) { Remove-Item -LiteralPath $drop -Force -ErrorAction SilentlyContinue }
+        # Same as above: the file is safe in _Fiery_Exports, but the job has to
+        # be given back explicitly now that it was claimed.
+        Complete-Job $j.id "requeue" $null | Out-Null
         Emit ("  ! hot folder '{0}' not found - saved to {1}, will retry" -f $HOTFOLDER_NAME, $dp) -ForegroundColor Yellow
       }
     }
   } catch {
-    Emit "  (waiting... $($_.Exception.Message))" -ForegroundColor DarkGray
+    # A rejected token is not a network hiccup and must not scroll past in grey:
+    # every poll would fail the same way and the queue would fill up unnoticed.
+    $code = try { [int]$_.Exception.Response.StatusCode } catch { 0 }
+    if ($code -eq 401) {
+      Emit "  ! The app is rejecting this agent's token - nothing will print." -ForegroundColor Red
+      Emit "    Delete jbg_agent_token.xml next to this script and restart to enter a new one." -ForegroundColor Red
+    } else {
+      Emit "  (waiting... $($_.Exception.Message))" -ForegroundColor DarkGray
+    }
   }
   Start-Sleep -Seconds $POLL_SECONDS
 }

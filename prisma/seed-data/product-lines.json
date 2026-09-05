@@ -1,0 +1,484 @@
+[
+ {
+  "id": "laundry",
+  "label": "Laundry",
+  "panels": [
+   {
+    "label": "Amazon Main Image",
+    "field": "main"
+   },
+   {
+    "label": "Source Poster (JPEG)",
+    "field": "jpeg"
+   }
+  ],
+  "actions": [
+   {
+    "label": "Open Print PDF",
+    "field": "pdf",
+    "primary": true
+   },
+   {
+    "label": "Open Amazon Main",
+    "field": "main",
+    "primary": false
+   },
+   {
+    "label": "Open Source JPEG",
+    "field": "jpeg",
+    "primary": false
+   },
+   {
+    "label": "Open Lamination",
+    "field": "lam",
+    "primary": false
+   }
+  ],
+  "steps": "<b>Print steps:</b> 1. Open the print PDF \u00b7 2. Fiery \u2192 Layout \u2192 fill / full-bleed \u00b7 3. Print on 11\" \u00d7 17\" laminated stock \u00b7 4. Single-sided portrait, edge to edge.",
+  "sortOrder": 0
+ },
+ {
+  "id": "feedingstation",
+  "label": "Feeding Station",
+  "panels": [
+   {
+    "label": "Amazon Main Image",
+    "field": "main"
+   },
+   {
+    "label": "Source Poster (JPEG)",
+    "field": "jpeg"
+   }
+  ],
+  "actions": [
+   {
+    "label": "Open Print PDF",
+    "field": "pdf",
+    "primary": true
+   },
+   {
+    "label": "Open Amazon Main",
+    "field": "main",
+    "primary": false
+   },
+   {
+    "label": "Open Source JPEG",
+    "field": "jpeg",
+    "primary": false
+   },
+   {
+    "label": "Open Lamination",
+    "field": "lam",
+    "primary": false
+   }
+  ],
+  "steps": "<b>Print steps:</b> 1. Open the print PDF \u00b7 2. Fiery \u2192 Layout \u2192 Fit to imageable area \u00b7 3. Print on 8.5\" \u00d7 11\" laminated stock \u00b7 4. Single-sided portrait.",
+  "sortOrder": 1
+ },
+ {
+  "id": "presidents",
+  "label": "Presidents",
+  "panels": [
+   {
+    "label": "Source Poster (JPEG)",
+    "field": "jpeg"
+   },
+   {
+    "label": "Amazon Main Image (2000\u00d72000)",
+    "field": "main"
+   }
+  ],
+  "actions": [
+   {
+    "label": "Open Print PDF",
+    "field": "pdf",
+    "primary": true
+   },
+   {
+    "label": "Open Source JPEG",
+    "field": "jpeg",
+    "primary": false
+   },
+   {
+    "label": "Open Amazon Main",
+    "field": "main",
+    "primary": false
+   }
+  ],
+  "steps": "<b>Print steps:</b> 1. Open the print PDF \u00b7 2. Fiery \u2192 Layout \u2192 Fit to imageable area \u00b7 3. Print on 8.5\" \u00d7 11\" laminated stock \u00b7 4. Single-sided portrait.",
+  "sortOrder": 2
+ },
+ {
+  "id": "humanbody",
+  "label": "Human Body",
+  "panels": [
+   {
+    "label": "Source Poster (JPEG of print file)",
+    "field": "jpeg"
+   },
+   {
+    "label": "Amazon Main Image",
+    "field": "main"
+   }
+  ],
+  "actions": [
+   {
+    "label": "Open Print PDF",
+    "field": "pdf",
+    "primary": true
+   },
+   {
+    "label": "Open Source JPEG",
+    "field": "jpeg",
+    "primary": false
+   },
+   {
+    "label": "Open Amazon Main",
+    "field": "main",
+    "primary": false
+   }
+  ],
+  "steps": "<b>Print steps:</b> 1. Open the print PDF \u00b7 2. Fiery \u2192 Layout \u2192 Fit to imageable area \u00b7 3. Print on 8.5\" \u00d7 11\" laminated stock \u00b7 4. Single-sided portrait.",
+  "sortOrder": 3
+ },
+ {
+  "id": "founding",
+  "label": "Civics Posters",
+  "panels": [
+   {
+    "label": "Side A / Poster",
+    "field": "pngA"
+   },
+   {
+    "label": "Side B / Collection Display",
+    "field": "pngB"
+   }
+  ],
+  "actions": [
+   {
+    "label": "Open Print PDF",
+    "field": "pdf",
+    "primary": true
+   },
+   {
+    "label": "Open Side A",
+    "field": "pngA",
+    "primary": false
+   },
+   {
+    "label": "Open Side B",
+    "field": "pngB",
+    "primary": false
+   }
+  ],
+  "steps": "<b>Fiery steps:</b> 11\" \u00d7 17\" posters = single-sided, full bleed. 8.5\" \u00d7 11\" binders = TWO-SIDED \u2014 send to Held queue, Process and Hold, Print; Job Log should show 1 two-sided sheet.",
+  "sortOrder": 4
+ },
+ {
+  "id": "animals",
+  "label": "Animals",
+  "panels": [
+   {
+    "label": "Side A",
+    "field": "pngA"
+   },
+   {
+    "label": "Side B",
+    "field": "pngB"
+   }
+  ],
+  "actions": [
+   {
+    "label": "Open Print PDF (2-sided)",
+    "field": "pdf",
+    "primary": true
+   },
+   {
+    "label": "Open Side A",
+    "field": "pngA",
+    "primary": false
+   },
+   {
+    "label": "Open Side B",
+    "field": "pngB",
+    "primary": false
+   }
+  ],
+  "steps": "<b>Fiery steps:</b> Two-sided 11\" \u00d7 17\" \u2014 send to Held queue, Process and Hold (fresh RIP), Print. Job Log should show 1 two-sided sheet per poster.",
+  "sortOrder": 5
+ },
+ {
+  "id": "babyfoods",
+  "label": "Baby Foods",
+  "panels": [
+   {
+    "label": "Side A",
+    "field": "pngA"
+   },
+   {
+    "label": "Side B",
+    "field": "pngB"
+   }
+  ],
+  "actions": [
+   {
+    "label": "Open Print PDF (2-sided)",
+    "field": "pdf",
+    "primary": true
+   },
+   {
+    "label": "Open Side A",
+    "field": "pngA",
+    "primary": false
+   },
+   {
+    "label": "Open Side B",
+    "field": "pngB",
+    "primary": false
+   }
+  ],
+  "steps": "<b>Fiery steps:</b> Two-sided 17\" \u00d7 11\" \u2014 send to Held queue, Process and Hold (fresh RIP), Print. Job Log should show 1 two-sided sheet per poster.",
+  "sortOrder": 6
+ },
+ {
+  "id": "helpers",
+  "label": "Community Helpers",
+  "panels": [
+   {
+    "label": "Side A",
+    "field": "pngA"
+   },
+   {
+    "label": "Side B",
+    "field": "pngB"
+   }
+  ],
+  "actions": [
+   {
+    "label": "Open Print PDF (2-sided)",
+    "field": "pdf",
+    "primary": true
+   },
+   {
+    "label": "Open Side A",
+    "field": "pngA",
+    "primary": false
+   },
+   {
+    "label": "Open Side B",
+    "field": "pngB",
+    "primary": false
+   }
+  ],
+  "steps": "<b>Fiery steps:</b> Two-sided \u2014 send to Held queue, Process and Hold, Print. 11x17 (poster) and 8.5x11 FullBleed (binder) are separate SKUs.",
+  "sortOrder": 7
+ },
+ {
+  "id": "calmingcorner",
+  "label": "Calming Corner",
+  "panels": [
+   {
+    "label": "Poster",
+    "field": "jpeg"
+   },
+   {
+    "label": "Image",
+    "field": "main"
+   }
+  ],
+  "actions": [
+   {
+    "label": "Open 11x17 Print",
+    "field": "pdf",
+    "primary": true
+   },
+   {
+    "label": "Open 12x18 Cut-File Print",
+    "field": "pdf12x18",
+    "primary": false
+   },
+   {
+    "label": "Open Image",
+    "field": "main",
+    "primary": false
+   }
+  ],
+  "steps": "<b>Print steps:</b> 11x17 flats print normally. 12x18 cut files include registration marks for cutting the die-cut shapes \u2014 do not alter. Bundle modal links both prints.",
+  "sortOrder": 8
+ },
+ {
+  "id": "safetycorner",
+  "label": "Safety Corner",
+  "panels": [
+   {
+    "label": "Poster (JPEG)",
+    "field": "jpeg"
+   },
+   {
+    "label": "Laminate Features",
+    "field": "lam"
+   }
+  ],
+  "actions": [
+   {
+    "label": "Open Print PDF",
+    "field": "pdf",
+    "primary": true
+   },
+   {
+    "label": "Open JPEG",
+    "field": "jpeg",
+    "primary": false
+   },
+   {
+    "label": "Open Laminate Image",
+    "field": "lam",
+    "primary": false
+   },
+   {
+    "label": "Open Lifestyle",
+    "field": "main",
+    "primary": false
+   }
+  ],
+  "steps": "<b>Print steps:</b> 8.5\"\u00d711\" full-bleed (0.007\" margin). Singles print from their own PDF. The 10-Pack Fiery master is one 10-page file \u2014 8 portrait posters + 2 landscape banner sheets. PET laminate + dry-erase.",
+  "sortOrder": 9
+ },
+ {
+  "id": "wifi",
+  "label": "WiFi / Guest-Info",
+  "panels": [
+   {
+    "label": "Main (JPEG)",
+    "field": "jpeg"
+   },
+   {
+    "label": "Laminate Feature",
+    "field": "lam"
+   }
+  ],
+  "actions": [
+   {
+    "label": "Open Print PDF",
+    "field": "pdf",
+    "primary": true
+   },
+   {
+    "label": "Open Main JPEG",
+    "field": "jpeg",
+    "primary": false
+   },
+   {
+    "label": "Open Laminate",
+    "field": "lam",
+    "primary": false
+   },
+   {
+    "label": "Open Lifestyle",
+    "field": "main",
+    "primary": false
+   }
+  ],
+  "steps": "<b>Print steps:</b> BIN = 8.5\u00d711 portrait, POS = 11\u00d717 portrait, full-bleed, PET laminate + dry-erase. Each design/size prints from its own PDF. QR area removed from all files.",
+  "sortOrder": 10
+ },
+ {
+  "id": "maps",
+  "label": "Maps",
+  "panels": [
+   {
+    "label": "Side A \u2014 Color",
+    "field": "pngA"
+   },
+   {
+    "label": "Side B \u2014 B&W",
+    "field": "pngB"
+   }
+  ],
+  "actions": [
+   {
+    "label": "Open Print File (PDF)",
+    "field": "pdf",
+    "primary": true
+   },
+   {
+    "label": "Open Side A PNG",
+    "field": "pngA",
+    "primary": false
+   },
+   {
+    "label": "Open Side B PNG",
+    "field": "pngB",
+    "primary": false
+   }
+  ],
+  "steps": "<b>Fiery steps:</b> 1. Send the _USE_ONLY file to the Held queue \u00b7 2. Right-click \u2192 Process and Hold (fresh RIP) \u00b7 3. Right-click \u2192 Print \u00b7 4. Job Log should show <b>1 Color + 1 B&amp;W</b>.",
+  "sortOrder": 11
+ },
+ {
+  "id": "learning",
+  "label": "Learning 4-Packs",
+  "panels": [
+   {
+    "label": "Source Poster (JPEG)",
+    "field": "jpeg"
+   },
+   {
+    "label": "Laminate Features",
+    "field": "lam"
+   }
+  ],
+  "actions": [
+   {
+    "label": "Open Print PDF",
+    "field": "pdf",
+    "primary": true
+   },
+   {
+    "label": "Open Source JPEG",
+    "field": "jpeg",
+    "primary": false
+   },
+   {
+    "label": "Open 4-Pack Collage",
+    "field": "main",
+    "primary": false
+   }
+  ],
+  "steps": "<b>Print steps:</b> 1. Open the print PDF \u00b7 2. Fiery \u2192 Layout \u2192 Fit to imageable area \u00b7 3. Print on 11\" \u00d7 17\" (Hero 17\" \u00d7 11\") laminated stock, full bleed \u00b7 4. Single-sided.",
+  "sortOrder": 12
+ },
+ {
+  "id": "faith",
+  "label": "Faith",
+  "panels": [
+   {
+    "label": "Source Poster (JPEG)",
+    "field": "jpeg"
+   },
+   {
+    "label": "5-Pack Image",
+    "field": "main"
+   }
+  ],
+  "actions": [
+   {
+    "label": "Open Print PDF",
+    "field": "pdf",
+    "primary": true
+   },
+   {
+    "label": "Open Source JPEG",
+    "field": "jpeg",
+    "primary": false
+   },
+   {
+    "label": "Open 5-Pack Image",
+    "field": "main",
+    "primary": false
+   }
+  ],
+  "steps": "<b>Print steps:</b> 1. Open the print PDF \u00b7 2. Fiery \u2192 Layout \u2192 Fit to imageable area \u00b7 3. Print on 8.5\" \u00d7 11\" laminated stock \u00b7 4. Single-sided portrait.",
+  "sortOrder": 13
+ }
+]

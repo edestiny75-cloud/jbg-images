@@ -1,0 +1,410 @@
+// JBG Fulfillment — data model.
+//
+// The eight tables below (products … print_jobs) already exist in the live
+// Supabase project and were reconstructed from every call site in the legacy
+// index.html. They have NOT yet been reconciled against the real database.
+//
+//   >>> Run `npx prisma db pull` before generating any migration. <<<
+//
+// Everything after the "--- NEW ---" divider is additive and does not exist
+// upstream yet.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------- existing --
+
+/// The product catalog. Natural primary key is the SKU.
+model Product {
+  sku           String  @id
+  title         String?
+  line          String?
+  size          String?
+  thumbUrl      String? @map("thumb_url")
+  pdfPath       String? @map("pdf_path")
+  pdf12x18Path  String? @map("pdf12x18_path")
+  fnskuPath     String? @map("fnsku_path")
+  fnskuCode     String? @map("fnsku_code")
+  asin          String?
+  sheetsPerUnit Int?    @map("sheets_per_unit")
+
+  // Added by the port: was BYSKU[sku].meta, a 136 KB client-side constant.
+  meta      String?
+  /// Catalog display order. Replaces the hard-coded PRES_ORDER array.
+  sortOrder Int?    @map("sort_order")
+
+  aliases   SkuAlias[]
+  prices    ProductPrice?
+  overrides ProductOverride?
+
+  @@index([line])
+  @@index([asin])
+  @@map("products")
+}
+
+/// Singleton row (id = 1) holding the cartonisation caps.
+model Setting {
+  id         Int    @id @default(1)
+  boxCapOz   Float  @map("box_cap_oz")
+  boxStackIn Float? @map("box_stack_in")
+  /// { "11x17": { sheet, mailer, base_in, per_sheet_in, columns }, "8.5x11": {...} }
+  weights    Json?
+
+  @@map("settings")
+}
+
+/// Customer-list SKU -> catalog SKU, learned from manual mappings.
+model SkuAlias {
+  listSku    String  @id @map("list_sku")
+  productSku String? @map("product_sku")
+
+  product Product? @relation(fields: [productSku], references: [sku], onDelete: SetNull)
+
+  @@index([productSku])
+  @@map("sku_aliases")
+}
+
+enum BatchStatus {
+  draft
+  planned
+  picking
+  packed
+  shipped
+
+  @@map("batch_status")
+}
+
+/// "Order kind" — was smuggled through source_filename as a JBGMETA: JSON blob.
+enum OrderKind {
+  fba
+  wholesale
+  quick
+  pick
+
+  @@map("order_kind")
+}
+
+/// One shipment / order.
+model Batch {
+  id             Int         @id @default(autoincrement())
+  shipmentNo     Int?        @map("shipment_no")
+  name           String?
+  sourceFilename String?     @map("source_filename")
+  status         BatchStatus @default(planned)
+  createdAt      DateTime    @default(now()) @map("created_at")
+
+  // Added by the port: these two were encoded as
+  // source_filename = 'JBGMETA:{"kind":…,"labels":…}'.
+  kind        OrderKind @default(fba)
+  needsLabels Boolean   @default(false) @map("needs_labels")
+
+  items     BatchItem[]
+  boxes     Box[]
+  printJobs PrintJob[]
+
+  @@index([createdAt])
+  @@index([status])
+  @@map("batches")
+}
+
+/// Mirrors the ladder in lib/domain/skuResolver.ts; these are the exact strings
+/// the legacy tool wrote to batch_items.resolve_status.
+enum ResolveStatus {
+  /// Matched on ASIN, which is unambiguous.
+  asin
+  /// Matched through a mapping a human previously confirmed.
+  aliased
+  /// Matched exactly, or after normalising / stripping suffixes.
+  matched
+  /// A close spelling was found; a human should confirm it.
+  needs_confirm
+  /// Nothing close enough.
+  unmapped
+
+  @@map("resolve_status")
+}
+
+/// One line of the customer's uploaded list.
+model BatchItem {
+  id                 Int            @id @default(autoincrement())
+  batchId            Int            @map("batch_id")
+  lineNo             Int            @map("line_no")
+  asin               String?
+  title              String?
+  requestedQty       Int            @map("requested_qty")
+  listSku            String         @map("list_sku")
+  resolvedProductSku String?        @map("resolved_product_sku")
+  size               String?
+  resolveStatus      ResolveStatus? @map("resolve_status")
+  notes              String?
+
+  batch Batch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@unique([batchId, lineNo])
+  @@index([batchId])
+  @@map("batch_items")
+}
+
+enum BoxStatus {
+  pending
+  picking
+  packed
+  shipped
+
+  @@map("box_status")
+}
+
+model Box {
+  id        Int       @id @default(autoincrement())
+  batchId   Int       @map("batch_id")
+  boxNo     Int       @map("box_no")
+  size      String
+  weightOz  Float     @default(0) @map("weight_oz")
+  unitCount Int       @default(0) @map("unit_count")
+  status    BoxStatus @default(pending)
+
+  // Added by the port: both were client-only state, silently lost on reload.
+  /// Chosen carton, e.g. "20x14x10".
+  carton  String?
+  thickIn Float?  @map("thick_in")
+
+  /// Set when the box leaves the building. Written by `shipBox`/`shipAll`.
+  shippedAt DateTime? @map("shipped_at")
+
+  batch Batch     @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  items BoxItem[]
+
+  @@unique([batchId, boxNo])
+  @@index([batchId, status])
+  @@map("boxes")
+}
+
+enum LabelStatus {
+  none
+  queued
+  printed
+
+  @@map("label_status")
+}
+
+model BoxItem {
+  id          Int         @id @default(autoincrement())
+  boxId       Int         @map("box_id")
+  productSku  String      @map("product_sku")
+  asin        String?
+  title       String?
+  /// Planned quantity, from the box planner.
+  qty         Int
+  /// Quantity actually packed. Diverges from `qty` when the picker is short.
+  actualQty   Int         @map("actual_qty")
+  picked      Boolean     @default(false)
+  labelStatus LabelStatus @default(none) @map("label_status")
+  thumbUrl    String?     @map("thumb_url")
+  fnskuPath   String?     @map("fnsku_path")
+
+  box Box @relation(fields: [boxId], references: [id], onDelete: Cascade)
+
+  @@index([boxId])
+  @@index([productSku])
+  @@map("box_items")
+}
+
+enum PrintJobStatus {
+  queued
+  claimed
+  done
+  error
+
+  @@map("print_job_status")
+}
+
+enum PrintJobType {
+  fiery
+  fnsku
+
+  @@map("print_job_type")
+}
+
+/// The contract with agent/JBG_Fiery_Agent.ps1.
+model PrintJob {
+  id         Int            @id @default(autoincrement())
+  batchId    Int?           @map("batch_id")
+  productSku String?        @map("product_sku")
+  filePath   String?        @map("file_path")
+  size       String?
+  copies     Int            @default(1)
+  type       PrintJobType?  @default(fiery)
+  status     PrintJobStatus @default(queued)
+  createdAt  DateTime       @default(now()) @map("created_at")
+
+  // Added by the port: the agent currently reports failure as a bare
+  // status='error' with no reason, and nothing records who took the job.
+  errorMessage String?   @map("error_message")
+  claimedAt    DateTime? @map("claimed_at")
+  claimedBy    String?   @map("claimed_by")
+
+  batch Batch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
+
+  @@index([status, type, createdAt])
+  @@index([batchId])
+  @@map("print_jobs")
+}
+
+// --------------------------------------------------------------- NEW ------
+
+// Everything below is new. None of it exists in the live database yet; it
+// arrives as the first migration this project owns.
+
+// --- Auth (Phase 2) -------------------------------------------------------
+// Replaces the dead client-side passcode gate. Shop-floor sign-in is
+// name + PIN, so credentials are stored here rather than delegated.
+
+enum Role {
+  admin
+  manager
+  packer
+
+  @@map("user_role")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String    @unique
+  email         String?   @unique
+  emailVerified DateTime? @map("email_verified")
+  image         String?
+  /// scrypt hash of the sign-in PIN. Never leaves the server.
+  pinHash       String    @map("pin_hash")
+  role          Role      @default(packer)
+  active        Boolean   @default(true)
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  accounts Account[]
+  sessions Session[]
+
+  @@map("users")
+}
+
+model Account {
+  userId            String  @map("user_id")
+  type              String
+  provider          String
+  providerAccountId String  @map("provider_account_id")
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  sessionToken String   @id @map("session_token")
+  userId       String   @map("user_id")
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@id([identifier, token])
+  @@map("verification_tokens")
+}
+
+// --- Product line config (was the LINECFG constant) -----------------------
+
+model ProductLine {
+  id        String  @id
+  label     String
+  /// [{ label, field }] — image panels shown in the product modal.
+  panels    Json    @default("[]")
+  /// [{ label, field, primary }] — buttons shown in the product modal.
+  actions   Json    @default("[]")
+  /// Packing instructions. Contains raw HTML; render it sanitised.
+  steps     String?
+  sortOrder Int     @default(0) @map("sort_order")
+
+  @@map("product_lines")
+}
+
+// --- Prices and overrides (Phase 9: were five localStorage keys) ----------
+
+model ProductPrice {
+  productSku String   @id @map("product_sku")
+  wholesale  Decimal? @db.Decimal(10, 2)
+  cost       Decimal? @db.Decimal(10, 2)
+  costBulk   Decimal? @map("cost_bulk") @db.Decimal(10, 2)
+  msrp       Decimal? @db.Decimal(10, 2)
+  map        Decimal? @db.Decimal(10, 2)
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  product Product @relation(fields: [productSku], references: [sku], onDelete: Cascade)
+
+  @@map("product_prices")
+}
+
+/// Per-SKU corrections to catalog facts. Were jbg_wt / jbg_shipwt /
+/// jbg_sizeoverride in browser storage, so they died with the cache.
+model ProductOverride {
+  productSku   String   @id @map("product_sku")
+  /// Item weight in ounces, overriding the computed sheet+mailer figure.
+  weightOz     Float?   @map("weight_oz")
+  /// Shipped weight in ounces.
+  shipWeightOz Float?   @map("ship_weight_oz")
+  /// "11x17" | "8.5x11", overriding what the SKU regex infers.
+  size         String?
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  product Product @relation(fields: [productSku], references: [sku], onDelete: Cascade)
+
+  @@map("product_overrides")
+}
+
+// --- Quotes (Phase 9: was the jbg_quotes localStorage key) ---------------
+
+model Quote {
+  id        String   @id @default(cuid())
+  number    Int      @unique @default(autoincrement())
+  customer  String?
+  notes     String?
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy String?  @map("created_by")
+
+  lines QuoteLine[]
+
+  @@index([createdAt])
+  @@map("quotes")
+}
+
+model QuoteLine {
+  id         Int     @id @default(autoincrement())
+  quoteId    String  @map("quote_id")
+  productSku String  @map("product_sku")
+  title      String?
+  qty        Int     @default(1)
+  unitPrice  Decimal @map("unit_price") @db.Decimal(10, 2)
+
+  quote Quote @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+
+  @@index([quoteId])
+  @@map("quote_lines")
+}

@@ -1,0 +1,283 @@
+/*
+ * Printed documents: the wholesale price sheet and the customer quote.
+ *
+ * These two were built in the legacy tool by concatenating an entire HTML
+ * document into a string — logo included, as a 448 KB base64 data URI, twice —
+ * and calling `window.open` on it (index.html:1235 and :1456). They are real
+ * routes now, which is why they can be linked, refreshed, bookmarked and sent
+ * to somebody else, and why the styles below are a stylesheet rather than a
+ * template literal.
+ *
+ * The app's own palette is deliberately not used here. The rest of the tool is
+ * a black screen; this is a sheet of paper, and it is dark ink on white.
+ */
+
+@page {
+  size: auto;
+  margin: 14mm;
+}
+
+.doc {
+  --doc-ink: #1a2942;
+  --doc-muted: #5b6b7f;
+  --doc-faint: #7a8794;
+  --doc-accent: #1c7c46;
+  --doc-line: #c4ccd4;
+  --doc-hair: #dce4ea;
+  --doc-wash: #f6f9f7;
+  --doc-head: #eef2f6;
+
+  box-sizing: border-box;
+  max-width: 1040px;
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: 24px 20px 48px;
+  background: #fff;
+  color: var(--doc-ink);
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.doc *,
+.doc *::before,
+.doc *::after {
+  box-sizing: inherit;
+}
+
+/* --- masthead ---------------------------------------------------------- */
+
+.doc-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding-bottom: 12px;
+  margin-bottom: 18px;
+  border-bottom: 3px solid var(--doc-accent);
+}
+
+.doc-head img {
+  width: auto;
+  height: 56px;
+}
+
+.doc-head h1 {
+  margin: 0;
+  font-size: 21px;
+  line-height: 1.2;
+}
+
+.doc-sub {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--doc-muted);
+}
+
+.doc-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px 24px;
+  margin-bottom: 16px;
+  font-size: 13px;
+}
+
+/* --- on-screen controls, never printed --------------------------------- */
+
+.doc-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.doc-btn {
+  padding: 10px 18px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--doc-accent);
+  color: #fff;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.doc-btn:hover {
+  filter: brightness(1.1);
+}
+
+.doc-btn.secondary {
+  background: transparent;
+  border: 1px solid var(--doc-line);
+  color: var(--doc-muted);
+  font-weight: 600;
+}
+
+.doc-hint {
+  font-size: 12px;
+  color: var(--doc-faint);
+}
+
+/* --- the price-sheet card grid ----------------------------------------- */
+
+.doc-section {
+  margin: 22px 0 10px;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--doc-accent);
+  break-after: avoid;
+}
+
+.doc-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+
+.wc {
+  padding: 10px;
+  border: 1px solid var(--doc-hair);
+  border-radius: 10px;
+  text-align: center;
+  break-inside: avoid;
+}
+
+.wc-im {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 150px;
+  margin-bottom: 8px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--doc-wash);
+  font-weight: 800;
+  color: var(--doc-faint);
+}
+
+.wc-im img {
+  max-width: 100%;
+  max-height: 150px;
+  object-fit: contain;
+}
+
+.wc-nm {
+  min-height: 32px;
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.wc-sku {
+  margin: 3px 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10.5px;
+  color: var(--doc-faint);
+}
+
+.wc-pr {
+  margin-top: 4px;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--doc-accent);
+}
+
+.wc-pr.tbd {
+  color: var(--doc-faint);
+  font-weight: 600;
+}
+
+/* --- the quote table ---------------------------------------------------- */
+
+.doc-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.doc-table th {
+  padding: 9px 10px;
+  border: 1px solid var(--doc-line);
+  background: var(--doc-head);
+  text-align: left;
+}
+
+.doc-table td {
+  padding: 9px 10px;
+  border: 1px solid var(--doc-line);
+  vertical-align: middle;
+}
+
+.doc-table tr {
+  break-inside: avoid;
+}
+
+.doc-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.doc-table .total td {
+  background: var(--doc-wash);
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.doc-pimg {
+  display: block;
+  width: 48px;
+  height: 58px;
+  border: 1px solid var(--doc-line);
+  border-radius: 4px;
+  object-fit: cover;
+}
+
+.doc-notes {
+  margin-top: 16px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--doc-line);
+  font-size: 12.5px;
+  white-space: pre-wrap;
+}
+
+.doc-foot {
+  margin-top: 20px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--doc-faint);
+  text-align: center;
+}
+
+.doc-empty {
+  padding: 40px 0;
+  text-align: center;
+  color: var(--doc-muted);
+}
+
+/* --- paper -------------------------------------------------------------- */
+
+@media print {
+  /* The app shell paints a dark gradient on <body>; paper is white. */
+  body {
+    background: #fff !important;
+  }
+
+  .doc {
+    max-width: none;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+  }
+
+  .doc-toolbar {
+    display: none;
+  }
+
+  .doc-grid {
+    gap: 10px;
+  }
+}
