@@ -78,6 +78,41 @@ def _locate_lines(img: Image.Image, entries: list[dict]) -> list[tuple[str, tupl
 def _norm(t: str) -> str:
     return _re.sub(r"[^a-z0-9]+", " ", t.lower()).strip()
 
+
+def _has_whole_token(haystack_norm: str, needle_norm: str) -> bool:
+    """True if needle_norm appears as contiguous whole word(s) in haystack_norm (both _norm'd)."""
+    if not needle_norm:
+        return False
+    hay = haystack_norm.split()
+    needle = needle_norm.split()
+    if not needle:
+        return False
+    n = len(needle)
+    for i in range(len(hay) - n + 1):
+        if hay[i:i + n] == needle:
+            return True
+    return False
+
+
+def _verify_text_ok(read_back: str, wrong: str, right: str) -> bool:
+    """Word-boundary check that the fix landed: right present, wrong gone (when they differ).
+
+    Uses the same punctuation folding as `_norm`. Substring `in` is intentionally avoided so
+    e.g. right='art' does not false-pass on 'artifact', and wrong='cat' is not flagged present
+    inside 'category'.
+    """
+    right_n = _norm(right)
+    wrong_n = _norm(wrong)
+    read_n = _norm(read_back)
+    if not right_n:
+        return False
+    if not _has_whole_token(read_n, right_n):
+        return False
+    if wrong_n != right_n and _has_whole_token(read_n, wrong_n):
+        return False
+    return True
+
+
 def _similar(a: str, b: str) -> float:
     """Similarity of a read-back to the expected text. The crop may catch neighbouring lines, so the
     best-matching line of the read-back counts, and a read that contains the expected text scores 1."""
@@ -321,11 +356,11 @@ def run_poster(path: str | Path, out_dir: str | Path, client, openai_client=None
                             gate = config.STYLE_GATE_MIN_CONDENSED
                     v = verify_fix(client, before, after, box, expected_line, model=model, min_style=gate, note=note)
                     # the model's matches flag is flaky on tight crops; trust the read-back text too
-                    right_n = _norm(f.right); wrong_n = _norm(f.wrong); read_n = _norm(v.read_back)
-                    text_ok = bool(right_n) and right_n in read_n and (wrong_n == right_n or wrong_n not in read_n)
+                    text_ok = _verify_text_ok(v.read_back, f.wrong, f.right)
+                    right_n = _norm(f.right)
                     if text_ok and not v.matches:
                         v.matches = True; v.passed = v.style_score >= gate
-                    elif not text_ok and v.matches and right_n and right_n not in read_n:
+                    elif not text_ok and v.matches and right_n and not _has_whole_token(_norm(v.read_back), right_n):
                         v.matches = False; v.passed = False
                     att = FixAttempt(backend=backend, round=rnd, prompt=prompt, read_back=v.read_back, style_score=v.style_score,
                                      passed=v.passed and outside_unchanged(before, after, [box]),
@@ -342,8 +377,7 @@ def run_poster(path: str | Path, out_dir: str | Path, client, openai_client=None
                         try:
                             after2, box2, prompt2 = apply_fix(before, f, backend, openai_client, client, model=model, loc_cache=loc_cache)
                             v2 = verify_fix(client, before, after2, box2, expected_line, model=model, min_style=gate, note=note)
-                            r2 = _norm(v2.read_back)
-                            ok2 = bool(right_n) and right_n in r2 and (wrong_n == right_n or wrong_n not in r2)
+                            ok2 = _verify_text_ok(v2.read_back, f.wrong, f.right)
                             passed2 = (v2.matches or ok2) and v2.style_score >= gate and outside_unchanged(before, after2, [box2])
                             att2 = FixAttempt(backend=backend, round=rnd, prompt=prompt2 + " [alt erase]", read_back=v2.read_back,
                                               style_score=v2.style_score, passed=passed2, note="; ".join(v2.artifacts), box=list(box2),
