@@ -482,10 +482,10 @@ async function approvePoster(jobId, index) {
     const r = await fetch(`/api/jobs/${encodeURIComponent(jobId)}/posters/${index}/approve`, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({dest: dest || null})});
     const d = await r.json();
     if (!r.ok) { alert('Could not save: ' + (d.detail || r.status)); return; }
-    alert('Saved to:
-' + d.dest + '
+    alert(`Saved to:
+${d.dest}
 
-Files: ' + d.files.join(', '));
+Files: ${d.files.join(', ')}`);
     await pollOnce();
   } catch (e) { alert('Could not save: ' + e); }
 }
