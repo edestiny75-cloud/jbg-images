@@ -104,7 +104,9 @@ def erase(img: Image.Image, box: BBox, halo: int = 2, ext: float = 0.6) -> BBox:
     mask8[~lane] = 0
     other = m & ~target
     sel = mask8 > 0
-    donor = _find_paper_donor(img, box, m.shape, (X0, Y0)) if ALLOW_DONOR else None
+    # When "ink" fills too much of the erase window the polarity is probably wrong (dark plate taken
+    # as ink). Clone-stamping then pastes parchment into the nameplate — refuse the donor path.
+    donor = _find_paper_donor(img, box, m.shape, (X0, Y0)) if (ALLOW_DONOR and float(m.mean()) <= 0.32) else None
     if donor is not None:
         dx0, dy0 = donor
         dpatch = img.crop((dx0, dy0, dx0 + (X1 - X0), dy0 + (Y1 - Y0)))
@@ -113,6 +115,11 @@ def erase(img: Image.Image, box: BBox, halo: int = 2, ext: float = 0.6) -> BBox:
         l_med = np.median(arr[~m].reshape(-1, 3), axis=0) if (~m).any() else None
         if d_med is None or l_med is None or np.abs(d_med - l_med).max() > 18:
             donor = None                              # different surface (plaque/banner vs paper): inpaint instead
+        else:
+            # Luminance gate: cream parchment (~220) must never stamp into a dark ribbon (~80) even when
+            # a wrong polarity makes channel-max diffs look small on sparse letter "paper" samples.
+            if abs(float(np.mean(d_med)) - float(np.mean(l_med))) > 22:
+                donor = None
     if donor is not None:
         # clone-stamp: real paper texture from elsewhere in the text box, feathered at the edges
         dx0, dy0 = donor

@@ -4,7 +4,7 @@ from PIL import Image, ImageDraw
 from . import config
 from .ingest import load_pages, sku_from_path
 from .inspect import inspect_poster, find_lines_containing, read_line
-from .locate import locate_candidates, set_polarity
+from .locate import locate_candidates, set_polarity, resolve_polarity, tighten_region, infer_polarity, deskew_image, map_box_affine, paper_fill_color
 from difflib import SequenceMatcher
 import re as _re
 from .locate import locate_word
@@ -23,6 +23,20 @@ def log(msg: str) -> None:
         print(msg, flush=True)
     except UnicodeEncodeError:
         print(msg.encode("ascii", "replace").decode("ascii"), flush=True)
+
+
+def _backends_for_finding(font_style: str, skew_angle: float = 0.0) -> list[str]:
+    """Backend try-order for one finding. Steep stylized skew → human only (see run_poster)."""
+    order = list(BACKENDS_PLAIN if font_style == "plain" else BACKENDS_STYLED)
+    if not config.USE_RETYPE:
+        order = [b for b in order if b != "retype"]
+    ang = float(skew_angle or 0)
+    if ang:
+        if abs(ang) >= 45 and font_style != "plain":
+            return ["higgsfield"]
+        return ["glyphclone"] + [b for b in order if b not in ("glyphclone", "inpaint_openai")]
+    return order
+
 
 BACKENDS_PLAIN = ["glyphclone", "inpaint_openai", "retype", "higgsfield"]
 BACKENDS_STYLED = ["inpaint_openai", "glyphclone", "retype", "higgsfield"]
@@ -78,6 +92,41 @@ def _locate_lines(img: Image.Image, entries: list[dict]) -> list[tuple[str, tupl
 def _norm(t: str) -> str:
     return _re.sub(r"[^a-z0-9]+", " ", t.lower()).strip()
 
+
+def _has_whole_token(haystack_norm: str, needle_norm: str) -> bool:
+    """True if needle_norm appears as contiguous whole word(s) in haystack_norm (both _norm'd)."""
+    if not needle_norm:
+        return False
+    hay = haystack_norm.split()
+    needle = needle_norm.split()
+    if not needle:
+        return False
+    n = len(needle)
+    for i in range(len(hay) - n + 1):
+        if hay[i:i + n] == needle:
+            return True
+    return False
+
+
+def _verify_text_ok(read_back: str, wrong: str, right: str) -> bool:
+    """Word-boundary check that the fix landed: right present, wrong gone (when they differ).
+
+    Uses the same punctuation folding as `_norm`. Substring `in` is intentionally avoided so
+    e.g. right='art' does not false-pass on 'artifact', and wrong='cat' is not flagged present
+    inside 'category'.
+    """
+    right_n = _norm(right)
+    wrong_n = _norm(wrong)
+    read_n = _norm(read_back)
+    if not right_n:
+        return False
+    if not _has_whole_token(read_n, right_n):
+        return False
+    if wrong_n != right_n and _has_whole_token(read_n, wrong_n):
+        return False
+    return True
+
+
 def _similar(a: str, b: str) -> float:
     """Similarity of a read-back to the expected text. The crop may catch neighbouring lines, so the
     best-matching line of the read-back counts, and a read that contains the expected text scores 1."""
@@ -112,15 +161,52 @@ WORD_MATCH_MIN = 0.7
 WORD_MATCH_STRONG = 0.9     # required when the line read-back only loosely matched
 LINE_MATCH_SOFT = 0.5       # below this a candidate line is rejected outright
 
+def _search_region(img: Image.Image, f: Finding) -> tuple:
+    """Padded locate region. Prefer a tighter box_bbox for tall map-label crops (Claude's line bbox is
+    often a long vertical strip that includes river and chrome)."""
+    src = f.bbox
+    if f.box_bbox:
+        bx0, by0, bx1, by1 = f.box_bbox
+        x0, y0, x1, y1 = f.bbox
+        b_area = max((bx1 - bx0) * (by1 - by0), 1)
+        a_area = max((x1 - x0) * (y1 - y0), 1)
+        # Use box_bbox when it is meaningfully tighter, especially for tall/rotated labels.
+        if b_area < 0.85 * a_area or (by1 - by0) > (bx1 - bx0) * 1.1:
+            src = f.box_bbox
+    x0, y0, x1, y1 = src
+    tall = (y1 - y0) >= (x1 - x0) * 1.15
+    # Tall map labels need little vertical pad (extra river/chrome confuses deskew). Wide nameplate /
+    # body boxes still use REGION_PAD_Y because Claude often clips ascenders.
+    pad_frac = 0.12 if tall else config.REGION_PAD_Y
+    pad_y = max(6, int(round((y1 - y0) * pad_frac)))
+    return (max(x0 - config.REGION_PAD_X, 0), max(y0 - pad_y, 0),
+            min(x1 + config.REGION_PAD_X, img.width), min(y1 + pad_y, img.height))
+
+
 def _locate_checked(img: Image.Image, f: Finding, client, model: str, cache: dict | None = None):
     """Locate the word, then have Claude read the chosen line crop and confirm it matches the transcript.
     Tries up to three candidate lines. Cached per finding so retries across backends do not re-read."""
     if cache is not None and f.id in cache:
         return cache[f.id]
-    x0, y0, x1, y1 = f.bbox
-    pad_y = max(6, int(round((y1 - y0) * config.REGION_PAD_Y)))
-    region = (max(x0 - config.REGION_PAD_X, 0), max(y0 - pad_y, 0), min(x1 + config.REGION_PAD_X, img.width), min(y1 + pad_y, img.height))
+    region = _search_region(img, f)
+    rw, rh = region[2] - region[0], region[3] - region[1]
+    tall = rh >= rw * 1.15
+    # Light cream lettering on a dark ribbon/plate: Claude's box often includes parchment around the
+    # cell. Tightening to the dark plate keeps Otsu / glyph splits on the lettering, not the plaque.
+    # Skip tighten on tall map-label crops: the "dark plate" heuristic latches onto rivers/borders.
+    pol = getattr(f, "text_color", None) or infer_polarity(img.crop(region))
+    if tall:
+        pol = "dark"
+        f.text_color = "dark"
+        set_polarity("dark")
+    else:
+        region = tighten_region(img, region, pol)
+        set_polarity(pol)
     cands = locate_candidates(img, region, f.line_text, f.word_index)
+    # Skewed map-label hits force dark ink polarity for glyphclone / donor downstream.
+    if cands and getattr(cands[0], "skew_angle", 0):
+        f.text_color = "dark"
+        set_polarity("dark")
     last = ""
     _normalize_index(f)
     reads: list[str] = []
@@ -182,9 +268,9 @@ def _locate_checked(img: Image.Image, f: Finding, client, model: str, cache: dic
 
 def _relocate(img: Image.Image, f: Finding, wi: int, ref):
     """Same confirmed line, different word index."""
-    x0, y0, x1, y1 = f.bbox
-    pad_y = max(6, int(round((y1 - y0) * config.REGION_PAD_Y)))
-    region = (max(x0 - config.REGION_PAD_X, 0), max(y0 - pad_y, 0), min(x1 + config.REGION_PAD_X, img.width), min(y1 + pad_y, img.height))
+    region = _search_region(img, f)
+    pol = getattr(f, "text_color", None) or infer_polarity(img.crop(region))
+    region = tighten_region(img, region, pol)
     try:
         for c in locate_candidates(img, region, f.line_text, wi):
             if c.line_box[1] == ref.line_box[1]:
@@ -193,11 +279,198 @@ def _relocate(img: Image.Image, f: Finding, wi: int, ref):
         return None
     return None
 
+def _upright_loc(loc):
+    """WordLocation in deskewed-crop coords for skewed map labels."""
+    from .locate import WordLocation
+    return WordLocation(
+        word_box=loc.upright_word_box,
+        erase_box=loc.upright_erase_box,
+        line_box=loc.upright_line_box,
+        baseline=loc.upright_baseline if loc.upright_baseline is not None else 0,
+        ink_color=loc.ink_color,
+        words=list(loc.upright_words or []),
+    )
+
+
+def _clamp_uloc_to_line_band(uloc, pad: int = 3):
+    """Keep upright erase/word boxes inside the line band so river chrome is not treated as ink."""
+    from .locate import WordLocation
+    lx0, ly0, lx1, ly1 = uloc.line_box
+    y0, y1 = ly0 - pad, ly1 + pad
+
+    def _clamp(b):
+        if b is None:
+            return b
+        return (b[0], max(b[1], y0), b[2], min(b[3], y1))
+
+    wb = _clamp(uloc.word_box)
+    # Prefer word-box x (plus 2px) over a wide erase that reaches into the next (often clipped) word.
+    eb = _clamp(uloc.erase_box)
+    if wb is not None and eb is not None:
+        eb = (max(eb[0], wb[0] - 2), eb[1], min(eb[2], wb[2] + 2), eb[3])
+    return WordLocation(
+        word_box=wb,
+        erase_box=eb,
+        line_box=uloc.line_box,
+        baseline=uloc.baseline,
+        ink_color=uloc.ink_color,
+        words=[_clamp(w) for w in (uloc.words or [])],
+    )
+
+
+def _restore_outside_line_band(edited: Image.Image, original: Image.Image, line_box, pad: int = 4) -> Image.Image:
+    """Undo clone/erase damage below/above the text band (river lines, borders)."""
+    import numpy as np
+    a = np.asarray(edited.convert("RGB")).copy()
+    b = np.asarray(original.convert("RGB"))
+    ly0 = max(line_box[1] - pad, 0)
+    ly1 = min(line_box[3] + pad, a.shape[0])
+    if ly0 > 0:
+        a[:ly0] = b[:ly0]
+    if ly1 < a.shape[0]:
+        a[ly1:] = b[ly1:]
+    return Image.fromarray(a)
+
+
+def _warp_edit_onto_sub(sub: Image.Image, rot: Image.Image, out_rot: Image.Image, Minv,
+                        erase_box, dilate: int = 3) -> tuple:
+    """Warp an upright edit back onto the skewed sub-crop using a *warped* mask.
+
+    Filling the axis-aligned bounding box of the mapped erase box (old behaviour) paints a huge
+    parallelogram over rivers/borders on steep map labels. Instead, build the mask in upright
+    space and warp it with NEAREST so only the text band is composited.
+    """
+    import cv2
+    import numpy as np
+    arr_rot = np.asarray(out_rot.convert("RGB"))
+    arr_pre = np.asarray(rot.convert("RGB"))
+    arr_sub = np.asarray(sub.convert("RGB"))
+    # Delta-only mask in upright space (dilated). Filling the whole erase band and warping it
+    # paints a text-aligned parallelogram that often clips the parallel river on map labels.
+    em = np.zeros(arr_rot.shape[:2], dtype=np.uint8)
+    delta = np.abs(arr_rot.astype(np.int16) - arr_pre.astype(np.int16)).max(axis=2) > 6
+    # Restrict deltas to the erase band so deskew interpolation noise elsewhere is ignored.
+    ex0, ey0, ex1, ey1 = erase_box
+    ey0, ey1 = max(ey0, 0), min(ey1, em.shape[0])
+    ex0, ex1 = max(ex0, 0), min(ex1, em.shape[1])
+    band = np.zeros_like(delta)
+    if ey1 > ey0 and ex1 > ex0:
+        band[ey0:ey1, ex0:ex1] = True
+    em[delta & band] = 255
+    if dilate > 0:
+        k = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (dilate * 2 + 1, dilate * 2 + 1))
+        em = cv2.dilate(em, k)
+        # Keep dilation from escaping far outside the erase band.
+        if ey1 > ey0 and ex1 > ex0:
+            allow = np.zeros_like(em)
+            ay0, ay1 = max(ey0 - dilate - 1, 0), min(ey1 + dilate + 1, em.shape[0])
+            ax0, ax1 = max(ex0 - dilate - 1, 0), min(ex1 + dilate + 1, em.shape[1])
+            allow[ay0:ay1, ax0:ax1] = 255
+            em = cv2.bitwise_and(em, allow)
+    mask = cv2.warpAffine(em, Minv, (sub.width, sub.height), flags=cv2.INTER_NEAREST) > 0
+    back = cv2.warpAffine(arr_rot, Minv, (sub.width, sub.height), flags=cv2.INTER_CUBIC,
+                          borderMode=cv2.BORDER_REFLECT)
+    composed = arr_sub.copy()
+    composed[mask] = back[mask]
+    return Image.fromarray(composed), mask
+
+
+def _apply_fix_skewed(img: Image.Image, f: Finding, loc, backend: str, openai_client, client,
+                       model: str, expected_line: str) -> tuple[Image.Image, tuple, str]:
+    """Clone/inpaint on a deskewed crop, then warp the edit back onto the poster."""
+    from .glyphclone import GlyphLibrary, clone_fix, NoGlyph
+    from .inpaint_openai import inpaint_word
+    from .retype import retype_word
+    from . import glyphclone as _gc
+
+    rx0, ry0, rx1, ry1 = loc.skew_region
+    sub = img.crop(loc.skew_region)
+    fill = paper_fill_color(sub)
+    rot, M, Minv = deskew_image(sub, loc.skew_angle, fill=fill)
+    uloc = _clamp_uloc_to_line_band(_upright_loc(loc))
+    # Skew crops often clip the next word (e.g. "RIVER"); a 6px stub makes clone_fix think the
+    # line is flush and force a heavy squeeze. Keep a clean [target, ...trailers] word list — never
+    # insert a duplicate of word_box (that sets next_x0 == word_x0 and collapses slack to ~0).
+    from .locate import WordLocation as _WL
+    wb = uloc.word_box
+    trailers = []
+    for w in (uloc.words or []):
+        if (w[2] - w[0]) < 12:
+            continue
+        # same span as the target (or nearly): skip
+        if abs(w[0] - wb[0]) <= 2 and abs(w[2] - wb[2]) <= 2:
+            continue
+        trailers.append(w)
+    words = [wb] + trailers
+    uloc = _WL(
+        word_box=wb, erase_box=uloc.erase_box, line_box=uloc.line_box,
+        baseline=uloc.baseline, ink_color=uloc.ink_color, words=words,
+    )
+    set_polarity("dark")
+    # Tight glyph window: map-label river ink sits just under the line and poisons CELL_EXT=0.6.
+    # Allow a little ragged-right shift on parchment so an inserted letter need not be squeezed away.
+    prev_ext = _gc.CELL_EXT
+    prev_shift = _gc.ALLOW_SHIFT
+    _gc.CELL_EXT = 0.12
+    _gc.ALLOW_SHIFT = True
+    try:
+        if backend == "glyphclone":
+            lines = [(f.line_text, uloc.line_box, uloc.words)]
+            lib = GlyphLibrary.from_lines(rot, lines)
+            box_right = rot.width
+            alt = getattr(f, "read_line_token", None) or getattr(f, "read_wrong", None)
+            wrong_used = _gc.reconcile_wrong(rot, uloc, f.wrong, alt)
+            surgical = _gc.surgical_insert(rot, uloc, wrong_used, f.right, lib, box_right=box_right)
+            if surgical is not None:
+                out_rot, box_rot = surgical
+            else:
+                out_rot, box_rot = clone_fix(rot, uloc, f.wrong, f.right, lib, box_right=box_right, alt_wrong=alt)
+            info = dict(_gc.LAST_INFO)
+            tag = "surgical" if info.get("surgical") else "glyphclone"
+            prompt = f"{tag}-skew@{loc.skew_angle:.0f} {info.get('wrong_used', f.wrong)!r} -> {f.right!r}"
+        elif backend == "retype":
+            out_rot, box_rot = retype_word(rot, uloc, f.line_text, f.word_index, f.right)
+            prompt = f"retype-skew@{loc.skew_angle:.0f} {f.wrong!r} -> {f.right!r}"
+        elif backend == "inpaint_openai":
+            out_rot, box_rot, prompt = inpaint_word(
+                rot, uloc.word_box, uloc.line_box, f.wrong, f.right, expected_line, client=openai_client
+            )
+            prompt = f"inpaint-skew@{loc.skew_angle:.0f} " + (prompt or "")
+        else:
+            raise ValueError(backend)
+    finally:
+        _gc.CELL_EXT = prev_ext
+        _gc.ALLOW_SHIFT = prev_shift
+
+    # Keep river / borders: only the line band may differ from the pre-edit deskew.
+    out_rot = _restore_outside_line_band(out_rot, rot, uloc.line_box, pad=3)
+    # Clamp reported change box into the line band too (avoids verify zooming onto river seams).
+    if isinstance(box_rot, (list, tuple)) and len(box_rot) == 4:
+        bx0, by0, bx1, by1 = box_rot
+        box_rot = (bx0, max(by0, uloc.line_box[1] - 2), bx1, min(by1, uloc.line_box[3] + 2))
+
+    # Warp mask follows the actual change box (surgical inserts are local); fall back to erase band.
+    warp_erase = tuple(box_rot) if isinstance(box_rot, (list, tuple)) and len(box_rot) == 4 else uloc.erase_box
+    # Pad a few px so antialiased edges land, but stay inside the line band.
+    we = (max(warp_erase[0] - 2, uloc.line_box[0] - 2),
+          max(warp_erase[1] - 1, uloc.line_box[1] - 1),
+          min(warp_erase[2] + 2, uloc.line_box[2] + 2),
+          min(warp_erase[3] + 1, uloc.line_box[3] + 1))
+    composed, _mask = _warp_edit_onto_sub(sub, rot, out_rot, Minv, we, dilate=2)
+    out = img.copy()
+    out.paste(composed, (rx0, ry0))
+    box_full = map_box_affine(tuple(box_rot), Minv)
+    box_full = (box_full[0] + rx0, box_full[1] + ry0, box_full[2] + rx0, box_full[3] + ry0)
+    return out, box_full, prompt
+
+
 def apply_fix(img: Image.Image, f: Finding, backend: str, openai_client, client,
               model: str = config.DEFAULT_MODEL, loc_cache: dict | None = None) -> tuple[Image.Image, tuple, str]:
     loc = _locate_checked(img, f, client, model, loc_cache)
     f.word_box, f.line_box = loc.word_box, loc.line_box
     expected_line = " ".join(f.line_text.split()[:f.word_index] + [f.right] + f.line_text.split()[f.word_index + 1:])
+    if getattr(loc, "skew_angle", 0) and loc.skew_region and loc.upright_word_box:
+        return _apply_fix_skewed(img, f, loc, backend, openai_client, client, model, expected_line)
     if backend == "glyphclone":
         lines = _locate_lines(img, f.box_lines)
         lib = GlyphLibrary.from_lines(img, lines)
@@ -210,7 +483,7 @@ def apply_fix(img: Image.Image, f: Finding, backend: str, openai_client, client,
             # character anywhere yet (see glyphclone.GlyphLibrary.get raising NoGlyph(ch)); other NoGlyph
             # messages (overflow past available slack) mean cloning can't work here at all, so re-raise.
             if len(str(e)) == 1:
-                needle = f.right.strip(".,;:!?\"'()")
+                needle = f.right.strip('.,;:!?"\'()')
                 extra = find_lines_containing(client, img, needle, model=config.DEFAULT_MODEL)
                 lines = lines + _locate_lines(img, extra)
                 lib = GlyphLibrary.from_lines(img, lines)
@@ -292,12 +565,27 @@ def run_poster(path: str | Path, out_dir: str | Path, client, openai_client=None
             break
         loc_cache: dict = {}
         for f in open_:
-            set_polarity(getattr(f, "text_color", "dark"))
+            # Resolve light-on-dark nameplates/ribbons from pixels (Claude's text_color is often wrong
+            # or left at the dark default). Wrong polarity makes glyph segmentation and paper-donor fail.
+            crop = img.crop(tuple(f.bbox)) if f.bbox else img
+            pol = resolve_polarity(crop, getattr(f, "text_color", None))
+            f.text_color = pol
+            set_polarity(pol)
             from . import retype as _rt, glyphclone as _gc
-            _rt.ALLOW_DONOR = _gc.ALLOW_SHIFT = (f.font_style == "plain")
-            order = BACKENDS_PLAIN if f.font_style == "plain" else BACKENDS_STYLED
-            if not config.USE_RETYPE:
-                order = [b for b in order if b != "retype"]
+            # Dark ribbon/plate cells: never clone-stamp from surrounding parchment; inpaint + regrain
+            # keeps the plaque surface. Shifting into slack also fights tight frames.
+            plate = (pol == "light")
+            _rt.ALLOW_DONOR = (f.font_style == "plain") and not plate
+            _gc.ALLOW_SHIFT = (f.font_style == "plain") and not plate
+            order = _backends_for_finding(f.font_style, 0)
+            try:
+                loc_peek = _locate_checked(img, f, client, model, loc_cache)
+                ang = float(getattr(loc_peek, "skew_angle", 0) or 0)
+                order = _backends_for_finding(f.font_style, ang)
+                if order == ["higgsfield"] and ang:
+                    log(f"  [{f.id}] steep skewed stylized label (angle={ang:.0f}): skip auto-fix → human")
+            except Exception:
+                pass
             for backend in order:
                 if backend == "higgsfield":
                     line = " ".join(f.line_text.split()[:f.word_index] + [f.right] + f.line_text.split()[f.word_index + 1:])
@@ -321,11 +609,11 @@ def run_poster(path: str | Path, out_dir: str | Path, client, openai_client=None
                             gate = config.STYLE_GATE_MIN_CONDENSED
                     v = verify_fix(client, before, after, box, expected_line, model=model, min_style=gate, note=note)
                     # the model's matches flag is flaky on tight crops; trust the read-back text too
-                    right_n = _norm(f.right); wrong_n = _norm(f.wrong); read_n = _norm(v.read_back)
-                    text_ok = bool(right_n) and right_n in read_n and (wrong_n == right_n or wrong_n not in read_n)
+                    text_ok = _verify_text_ok(v.read_back, f.wrong, f.right)
+                    right_n = _norm(f.right)
                     if text_ok and not v.matches:
                         v.matches = True; v.passed = v.style_score >= gate
-                    elif not text_ok and v.matches and right_n and right_n not in read_n:
+                    elif not text_ok and v.matches and right_n and not _has_whole_token(_norm(v.read_back), right_n):
                         v.matches = False; v.passed = False
                     att = FixAttempt(backend=backend, round=rnd, prompt=prompt, read_back=v.read_back, style_score=v.style_score,
                                      passed=v.passed and outside_unchanged(before, after, [box]),
@@ -342,8 +630,7 @@ def run_poster(path: str | Path, out_dir: str | Path, client, openai_client=None
                         try:
                             after2, box2, prompt2 = apply_fix(before, f, backend, openai_client, client, model=model, loc_cache=loc_cache)
                             v2 = verify_fix(client, before, after2, box2, expected_line, model=model, min_style=gate, note=note)
-                            r2 = _norm(v2.read_back)
-                            ok2 = bool(right_n) and right_n in r2 and (wrong_n == right_n or wrong_n not in r2)
+                            ok2 = _verify_text_ok(v2.read_back, f.wrong, f.right)
                             passed2 = (v2.matches or ok2) and v2.style_score >= gate and outside_unchanged(before, after2, [box2])
                             att2 = FixAttempt(backend=backend, round=rnd, prompt=prompt2 + " [alt erase]", read_back=v2.read_back,
                                               style_score=v2.style_score, passed=passed2, note="; ".join(v2.artifacts), box=list(box2),

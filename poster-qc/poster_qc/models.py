@@ -70,13 +70,28 @@ class PosterResult:
     handoff: dict = field(default_factory=dict)
     print_check: dict = field(default_factory=dict)   # detected print size / stretch / dpi   # paste-ready ChatGPT / Higgsfield prompts for open items
 
+    def _facts_need_review(self) -> bool:
+        """True when any inspect fact is wrong or doubtful (blocks CLEAN)."""
+        for fact in self.facts or []:
+            if not isinstance(fact, dict):
+                continue
+            if fact.get("verdict") in ("wrong", "doubtful"):
+                return True
+        return False
+
     @property
     def status(self) -> str:
         if self.mode == "inspect":
-            return "REPORT" if self.findings else "CLEAN"
+            # Findings still produce REPORT; wrong/doubtful facts alone escalate to REVIEW
+            # so they cannot look CLEAN on the dashboard.
+            if self.findings:
+                return "REPORT"
+            return "REVIEW" if self._facts_need_review() else "CLEAN"
         if any(f.status in ("open", "needs_human") for f in self.findings):
             return "NEEDS_HUMAN"
         if any(f.status == "review" for f in self.findings):
+            return "REVIEW"
+        if self._facts_need_review():
             return "REVIEW"
         return "CLEAN"
 
