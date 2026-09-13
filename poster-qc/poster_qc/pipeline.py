@@ -4,7 +4,7 @@ from PIL import Image, ImageDraw
 from . import config
 from .ingest import load_pages, sku_from_path
 from .inspect import inspect_poster, find_lines_containing, read_line
-from .locate import locate_candidates, set_polarity
+from .locate import locate_candidates, set_polarity, resolve_polarity, tighten_region, infer_polarity
 from difflib import SequenceMatcher
 import re as _re
 from .locate import locate_word
@@ -155,6 +155,10 @@ def _locate_checked(img: Image.Image, f: Finding, client, model: str, cache: dic
     x0, y0, x1, y1 = f.bbox
     pad_y = max(6, int(round((y1 - y0) * config.REGION_PAD_Y)))
     region = (max(x0 - config.REGION_PAD_X, 0), max(y0 - pad_y, 0), min(x1 + config.REGION_PAD_X, img.width), min(y1 + pad_y, img.height))
+    # Light cream lettering on a dark ribbon/plate: Claude's box often includes parchment around the
+    # cell. Tightening to the dark plate keeps Otsu / glyph splits on the lettering, not the plaque.
+    pol = getattr(f, "text_color", None) or infer_polarity(img.crop(region))
+    region = tighten_region(img, region, pol)
     cands = locate_candidates(img, region, f.line_text, f.word_index)
     last = ""
     _normalize_index(f)
@@ -220,6 +224,8 @@ def _relocate(img: Image.Image, f: Finding, wi: int, ref):
     x0, y0, x1, y1 = f.bbox
     pad_y = max(6, int(round((y1 - y0) * config.REGION_PAD_Y)))
     region = (max(x0 - config.REGION_PAD_X, 0), max(y0 - pad_y, 0), min(x1 + config.REGION_PAD_X, img.width), min(y1 + pad_y, img.height))
+    pol = getattr(f, "text_color", None) or infer_polarity(img.crop(region))
+    region = tighten_region(img, region, pol)
     try:
         for c in locate_candidates(img, region, f.line_text, wi):
             if c.line_box[1] == ref.line_box[1]:
@@ -327,9 +333,18 @@ def run_poster(path: str | Path, out_dir: str | Path, client, openai_client=None
             break
         loc_cache: dict = {}
         for f in open_:
-            set_polarity(getattr(f, "text_color", "dark"))
+            # Resolve light-on-dark nameplates/ribbons from pixels (Claude's text_color is often wrong
+            # or left at the dark default). Wrong polarity makes glyph segmentation and paper-donor fail.
+            crop = img.crop(tuple(f.bbox)) if f.bbox else img
+            pol = resolve_polarity(crop, getattr(f, "text_color", None))
+            f.text_color = pol
+            set_polarity(pol)
             from . import retype as _rt, glyphclone as _gc
-            _rt.ALLOW_DONOR = _gc.ALLOW_SHIFT = (f.font_style == "plain")
+            # Dark ribbon/plate cells: never clone-stamp from surrounding parchment; inpaint + regrain
+            # keeps the plaque surface. Shifting into slack also fights tight frames.
+            plate = (pol == "light")
+            _rt.ALLOW_DONOR = (f.font_style == "plain") and not plate
+            _gc.ALLOW_SHIFT = (f.font_style == "plain") and not plate
             order = BACKENDS_PLAIN if f.font_style == "plain" else BACKENDS_STYLED
             if not config.USE_RETYPE:
                 order = [b for b in order if b != "retype"]

@@ -41,3 +41,35 @@ def test_erase_keeps_texture_not_flat():
     patch = np.asarray(img)[14:60, 36:150]
     assert patch.std() > 2.0                 # not a flat fill
     assert patch.mean() > 200                # ink is gone
+
+
+def test_erase_dark_plate_does_not_stamp_parchment():
+    """Even if ALLOW_DONOR is on, erasing cream lettering on a dark plate must not paste parchment."""
+    from PIL import Image, ImageDraw, ImageFont
+    import numpy as np
+    from poster_qc.locate import locate_word, set_polarity, tighten_region
+    from poster_qc.retype import erase
+    from poster_qc import retype as rt
+
+    f = ImageFont.truetype(r"C:\\Windows\\Fonts\\georgiab.ttf", 26)
+    sheet = Image.new("RGB", (700, 300), (230, 216, 192))
+    rng = np.random.default_rng(3)
+    a = np.asarray(sheet).astype(np.float32) + rng.normal(0, 4, (300, 700, 3))
+    sheet = Image.fromarray(np.clip(a, 0, 255).astype(np.uint8))
+    d = ImageDraw.Draw(sheet)
+    d.rectangle((120, 100, 560, 190), fill=(88, 24, 30))
+    d.rectangle((122, 102, 558, 188), outline=(205, 168, 85), width=5)
+    d.text((150, 128), "PRIVACY", font=f, fill=(250, 245, 230))
+    loose = (80, 70, 600, 220)
+    set_polarity("light")
+    rt.ALLOW_DONOR = True
+    try:
+        region = tighten_region(sheet, loose, "light")
+        loc = locate_word(sheet, region, "PRIVACY", 0)
+        erase(sheet, loc.erase_box)
+        plate = np.asarray(sheet.crop((130, 110, 550, 180)))
+        assert plate.mean() < 130, plate.mean()
+        assert plate.std() > 1.0
+    finally:
+        set_polarity("auto")
+        rt.ALLOW_DONOR = True

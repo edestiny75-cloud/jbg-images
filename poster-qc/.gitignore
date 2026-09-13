@@ -9,3 +9,6 @@ poster_qc/.env
 /_work/
 desktop.ini
 .playwright-mcp/
+
+.venv/
+

@@ -28,15 +28,141 @@ def otsu(gray: np.ndarray) -> int:
         if between > best: best, thresh = between, t
     return thresh
 
-POLARITY = "auto"    # "dark" (dark text on light), "light" (light text on dark), or "auto" (minority class)
+POLARITY = "auto"    # "dark" (dark text on light), "light" (light text on dark), or "auto" (text-likeness)
 
 def set_polarity(mode: str | None) -> None:
     global POLARITY
     POLARITY = mode if mode in ("dark", "light") else "auto"
 
+def _text_likeness(mask: np.ndarray) -> float:
+    """Score how much mask looks like lettering after stripping rules/borders/tall fills.
+    Prefers stroke-density line bands (ink fraction ~5-35% inside the band). A dark plaque with
+    letter-shaped holes scores high on raw glyph counts but fails the density check — that is the
+    framed-nameplate failure mode on parchment."""
+    if mask.size == 0 or not mask.any():
+        return -1.0
+    m = strip_edge_slivers(strip_tall_components(strip_rules(mask.copy())))
+    frac = float(m.mean())
+    if frac < 0.004 or frac > 0.42:
+        return -1.0
+    lines = text_lines(m)
+    if not lines:
+        return -1.0
+    score = 0.0
+    for y0, y1 in lines:
+        h = y1 - y0
+        if h < 5:
+            continue
+        band = m[y0:y1]
+        band_frac = float(band.mean())
+        cols = denoise_profile(band.sum(axis=0).astype(np.float64), frac=0.05).astype(np.int64)
+        glyphs = _drop_slivers(runs(cols, min_gap=0))
+        if len(glyphs) < 2:
+            continue
+        score += len(glyphs)
+        if 6 <= h <= 90:
+            score += 8.0
+        # stroke density: real ink is a minority inside the line band
+        if 0.04 <= band_frac <= 0.36:
+            score += 20.0
+        elif band_frac > 0.45:
+            score -= 30.0                      # fill / swiss-cheese plate, not strokes
+        span = glyphs[-1][1] - glyphs[0][0]
+        if span > 0.92 * m.shape[1] and len(glyphs) <= 3:
+            score -= 6.0
+    return score if score > 0 else -1.0
+
+def _plate_subcrop(img: Image.Image) -> Image.Image | None:
+    """If img is a dark ribbon/plaque on lighter parchment, return a crop of the plate; else None.
+    Detects a single solid dark blob (high fill ratio) that is a minority of the crop."""
+    import cv2
+    g = np.asarray(img.convert("L"), dtype=np.uint8)
+    t = otsu(g)
+    dark = g < t
+    if not (0.06 <= float(dark.mean()) <= 0.48):
+        return None
+    n, labels, stats, _ = cv2.connectedComponentsWithStats(dark.astype(np.uint8), connectivity=8)
+    if n <= 1:
+        return None
+    areas = stats[1:, cv2.CC_STAT_AREA]
+    i = 1 + int(np.argmax(areas))
+    area = int(stats[i, cv2.CC_STAT_AREA])
+    w, h = int(stats[i, cv2.CC_STAT_WIDTH]), int(stats[i, cv2.CC_STAT_HEIGHT])
+    if w * h <= 0 or area < 0.55 * int(dark.sum()):
+        return None
+    fill = area / float(w * h)
+    if fill < 0.55 or area < 0.08 * dark.size:
+        return None
+    x, y = int(stats[i, cv2.CC_STAT_LEFT]), int(stats[i, cv2.CC_STAT_TOP])
+    pad = 4
+    return img.crop((max(x - pad, 0), max(y - pad, 0),
+                     min(x + w + pad, img.width), min(y + h + pad, img.height)))
+
+def infer_polarity(img: Image.Image) -> str:
+    """Pick 'light' or 'dark' by which Otsu class looks more like text after cleanup.
+    Loose Claude boxes around framed nameplates are tightened to the dark plate first so parchment
+    margins do not make the plaque the 'minority ink' class."""
+    plate = _plate_subcrop(img)
+    target = plate if plate is not None and plate.size[0] * plate.size[1] < img.width * img.height * 0.95 else img
+    g = np.asarray(target.convert("L"), dtype=np.uint8)
+    t = otsu(g)
+    dark, light = g < t, g > t
+    sd, sl = _text_likeness(dark), _text_likeness(light)
+    if sl > sd:
+        return "light"
+    if sd > sl:
+        return "dark"
+    return "light" if light.mean() <= dark.mean() else "dark"
+
+def resolve_polarity(img: Image.Image, hinted: str | None = None) -> str:
+    """Polarity for a finding crop. Pixel inference wins over Claude's text_color hint — civics
+    nameplates are often labelled 'dark' (or left at the default) while the lettering is cream on a
+    ribbon, and a wrong polarity makes cell segmentation + paper-donor both fail.
+    The hinted argument is accepted for call-site clarity but inference always wins."""
+    return infer_polarity(img)
+
+def tighten_region(img: Image.Image, region: BBox, polarity: str) -> BBox:
+    """For light-on-dark lettering, shrink a loose Claude box to the dark plate so parchment margins
+    do not dominate Otsu / donor search. Dark-on-light regions are returned unchanged."""
+    if polarity != "light":
+        return region
+    rx0, ry0, rx1, ry1 = region
+    sub = img.crop(region)
+    if sub.width < 12 or sub.height < 12:
+        return region
+    g = np.asarray(sub.convert("L"), dtype=np.uint8)
+    t = otsu(g)
+    dark = g < t
+    # plate on parchment: dark is a minority fill (not the lettering)
+    if not (0.04 <= dark.mean() <= 0.55):
+        return region
+    import cv2
+    n, labels, stats, _ = cv2.connectedComponentsWithStats(dark.astype(np.uint8), connectivity=8)
+    if n <= 1:
+        return region
+    # largest dark blob = the ribbon / plaque cell
+    areas = stats[1:, cv2.CC_STAT_AREA]
+    i = 1 + int(np.argmax(areas))
+    x, y = int(stats[i, cv2.CC_STAT_LEFT]), int(stats[i, cv2.CC_STAT_TOP])
+    w, h = int(stats[i, cv2.CC_STAT_WIDTH]), int(stats[i, cv2.CC_STAT_HEIGHT])
+    if w * h < 0.05 * dark.size:
+        return region
+    pad = 4
+    return (
+        rx0 + max(x - pad, 0),
+        ry0 + max(y - pad, 0),
+        rx0 + min(x + w + pad, sub.width),
+        ry0 + min(y + h + pad, sub.height),
+    )
+
 def ink_mask(img: Image.Image) -> np.ndarray:
     """Text pixels of a crop. POLARITY 'dark' = darker-than-threshold is ink, 'light' = lighter is ink,
-    'auto' = whichever class is the minority (a crop is mostly background)."""
+    'auto' = whichever class is the minority (a crop is mostly background).
+
+    Framed nameplates need an explicit 'light' polarity (see infer_polarity / resolve_polarity): auto
+    minority-class is wrong when a dark plate sits on parchment (the plate is the minority). The
+    pipeline resolves polarity on the finding crop before locate/clone so glyph patches never rely
+    on auto heuristics."""
     g = np.asarray(img.convert("L"), dtype=np.uint8)
     t = otsu(g)
     if POLARITY == "dark":

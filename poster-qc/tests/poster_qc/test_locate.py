@@ -68,3 +68,75 @@ def test_polarity_context():
         locate.set_polarity("dark");  assert ink_mask(img).mean() > 0.6      # wrong polarity picks the plate
     finally:
         locate.set_polarity("auto")
+
+
+def _framed_nameplate_on_parchment():
+    """Civics-style dark ribbon cell with gold frame sitting on parchment — Claude boxes are loose."""
+    from PIL import Image, ImageDraw, ImageFont
+    import numpy as np
+    f = ImageFont.truetype(r"C:\\Windows\\Fonts\\georgiab.ttf", 26)
+    sheet = Image.new("RGB", (700, 400), (230, 216, 192))
+    rng = np.random.default_rng(1)
+    a = np.asarray(sheet).astype(np.float32) + rng.normal(0, 3, (400, 700, 3))
+    sheet = Image.fromarray(np.clip(a, 0, 255).astype(np.uint8))
+    px0, py0, px1, py1 = 120, 140, 580, 230
+    d = ImageDraw.Draw(sheet)
+    d.rectangle((px0, py0, px1, py1), fill=(88, 24, 30))
+    d.rectangle((px0 + 2, py0 + 2, px1 - 2, py1 - 2), outline=(205, 168, 85), width=5)
+    d.text((px0 + 30, py0 + 28), "PRIVACT AND CONSUMERS", font=f, fill=(250, 245, 230))
+    loose = (80, 100, 620, 270)
+    return sheet, loose, (px0, py0, px1, py1)
+
+
+def test_infer_polarity_framed_nameplate_on_parchment():
+    from poster_qc.locate import infer_polarity, resolve_polarity
+    sheet, loose, _ = _framed_nameplate_on_parchment()
+    crop = sheet.crop(loose)
+    assert infer_polarity(crop) == "light"
+    # Claude often leaves text_color at the dark default — pixels must win
+    assert resolve_polarity(crop, "dark") == "light"
+    assert resolve_polarity(crop, "light") == "light"
+
+
+def test_resolved_light_ink_mask_on_nameplate():
+    """Pipeline path: resolve polarity -> set light -> tighten -> ink_mask sees cream strokes."""
+    from poster_qc.locate import ink_mask, set_polarity, text_lines, tighten_region, resolve_polarity
+    sheet, loose, plate = _framed_nameplate_on_parchment()
+    pol = resolve_polarity(sheet.crop(loose), "dark")
+    assert pol == "light"
+    set_polarity(pol)
+    try:
+        region = tighten_region(sheet, loose, pol)
+        m = ink_mask(sheet.crop(region))
+        lines = text_lines(m)
+        assert lines, "expected a text line on the plate"
+        y0, y1 = lines[0]
+        assert (y1 - y0) < 0.5 * (region[3] - region[1])   # line, not whole plaque
+        assert 0.01 < m.mean() < 0.35
+    finally:
+        set_polarity("auto")
+
+
+def test_tighten_region_shrinks_to_dark_plate():
+    from poster_qc.locate import tighten_region
+    sheet, loose, plate = _framed_nameplate_on_parchment()
+    tight = tighten_region(sheet, loose, "light")
+    # tightened box should sit near the plate, not the full parchment pad
+    assert tight[0] >= loose[0] and tight[2] <= loose[2]
+    assert (tight[2] - tight[0]) < (loose[2] - loose[0]) - 20
+    assert tight[0] <= plate[0] + 10 and tight[2] >= plate[2] - 10
+
+
+def test_locate_light_nameplate_despite_dark_hint_context():
+    """With polarity resolved to light, locate returns cream ink and a tight word box."""
+    from poster_qc.locate import locate_word, set_polarity, tighten_region
+    sheet, loose, _ = _framed_nameplate_on_parchment()
+    set_polarity("light")
+    try:
+        region = tighten_region(sheet, loose, "light")
+        loc = locate_word(sheet, region, "PRIVACT AND CONSUMERS", 0)
+        assert loc.ink_color[0] > 200                     # cream lettering, not the plate
+        assert (loc.word_box[2] - loc.word_box[0]) < 200  # PRIVACT, not the whole plate
+        assert len(loc.words) == 3
+    finally:
+        set_polarity("auto")
