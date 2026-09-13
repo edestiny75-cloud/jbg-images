@@ -1,7 +1,7 @@
 ﻿# FROM-TABILO - poster-qc missing glyphs
 
 **Branch:** tabilo/qc-missing-glyphs (off tabilo/qc-3-5 @ ed86936)  
-**PR:** (fill after open)  
+**PR:** https://github.com/edestiny75-cloud/jbg-images/pull/4  
 **Date:** 2026-09-13 evening (ET)  
 **Scope:** poster-qc/ only. No main merge. PR #2 and #3 stay OPEN.
 
@@ -38,3 +38,4 @@ pytest tests/poster_qc -q → **121 passed**
 ### Sam / Susan
 - Keep PR #2 and #3 **OPEN**; do not merge main.
 - Review this PR tip; base is `tabilo/qc-3-5`.
+
