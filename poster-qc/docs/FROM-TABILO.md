@@ -1,41 +1,48 @@
-﻿# FROM-TABILO - poster-qc missing glyphs
+# FROM-TABILO - evening stack for Sam
 
-**Branch:** tabilo/qc-missing-glyphs (off tabilo/qc-3-5 @ ed86936)  
-**PR:** https://github.com/edestiny75-cloud/jbg-images/pull/4  
+**Branch tip:** tabilo/qc-missing-glyphs (PR #4)  
 **Date:** 2026-09-13 evening (ET)  
-**Scope:** poster-qc/ only. No main merge. PR #2 and #3 stay OPEN.
+**Desk:** synced to #4 tip; POSTER_QC_BACKEND=claude-code  
+**Rule:** All PRs stay **OPEN**. No main merge. Wait Sam final look.  
+**No new engine work tonight.**
 
-## Prior lanes
-- **PR #2** nameplates — OPEN, accepted DONE (pytest 106). Atlantic unchased.
-- **PR #3** (#3-5 re-inspect / fact→spelling / punct) — OPEN on `tabilo/qc-3-5` (pytest 112). Susan OK; desk smoke done.
+---
 
-## This lane — missing glyphs
-Highest remaining engine gap from HANDOFF: when the corrected word needs a letter that is not in the finding's own text box, clone used to fall through to OpenAI inpaint / human (or only recover if the *whole corrected word* appeared elsewhere).
+## Stack for Sam (2026-09-13 evening)
 
-### Pytest
-pytest tests/poster_qc -q → **121 passed**
+- **PR #2** https://github.com/edestiny75-cloud/jbg-images/pull/2 - tabilo/qc-nameplates  
+  Nameplates / dark banners + map locate skew + steep-skew clean **NEEDS_HUMAN**.  
+  Susan accepted lane. pytest was **106** at accept.
 
-### Approach
-1. **Poster-wide local harvest (no API):** `_poster_donor_line_entries` gathers every finding's `box_lines` + own line. `apply_fix(..., donor_lines=)` merges those into the GlyphLibrary before cloning. Sibling boxes Claude already transcribed can donate letters with zero vision cost.
-2. **Character-needle recovery:** on `NoGlyph(ch)`, `find_lines_containing` is called with the missing *character* (not `f.right`). Prompt asks for lines that contain that character inside any word (e.g. `'h'` from "the house" for Busk→Bush).
-3. **Safe casefold donors:** `SAFE_CASEFOLD = CcOoSsUuVvWwXxZz` — opposite-case borrow only when the skeleton matches after size scaling. Shape-changers (H/h, A/a, …) stay NoGlyph → inpaint/human. Recorded in `LAST_INFO["casefold"]`.
-4. Helpers: `chars_needed_for_edit`, `GlyphLibrary.has` / `missing_in` / `absorb`.
+- **PR #3** https://github.com/edestiny75-cloud/jbg-images/pull/3 - tabilo/qc-3-5  
+  #3 known re-inspect, #4 fact->spelling, #5 punct.  
+  Gettysburg smoke **PASS** behaviors. pytest **112**.
 
-`USE_RETYPE` stays **False**. No OpenAI calls in tests. Script / width / low-res skipped per Susan.
+- **PR #4** https://github.com/edestiny75-cloud/jbg-images/pull/4 - tabilo/qc-missing-glyphs  
+  Poster-wide donor harvest + char-needle + safe casefold.  
+  Gettysburg smoke **PASS** donor harvest. Susan accepted. pytest **121**.
 
-### Tests added
-- `test_glyphclone.py`: chars_needed, has/missing+casefold, get casefold, clone casefold, borrow from other known line, still raises when truly absent
-- `test_inspect.py`: char-needle prompt
-- `test_pipeline.py`: sibling-box harvest without vision; char-search not whole-word
+- **All OPEN** - no main merge - wait Sam final look.
+- Desk synced to **#4 tip**; POSTER_QC_BACKEND=claude-code.
+- **Parked:** script / blackletter, width>15%, low-res upscale, Atlantic unchased.
+- **Grade Desk** parked until QC finished (Sam priority).
 
-### Remaining limits
-- Letter truly absent in that style → still inpaint / human.
-- Unsafe case pairs (H↔h etc.) not borrowed (would fail style gate).
-- Script / blackletter / painted lettering, width>15% flush, low-res — not in this PR.
-- Atlantic unchased.
-- Skewed map-label path does not yet merge poster-wide donors (deskew crop only).
+---
 
-### Sam / Susan
-- Keep PR #2 and #3 **OPEN**; do not merge main.
-- Review this PR tip; base is `tabilo/qc-3-5`.
+## Lane notes (brief)
 
+### PR #2 - nameplates
+Susan accepted DONE. Steep skew >=45 deg clean NEEDS_HUMAN is correct. Atlantic unchased.
+
+### PR #3 - #3-5
+Known re-inspect, fact->spelling promote, locate punctuation hardening. Gettysburg smoke PASS.
+
+### PR #4 - missing glyphs
+Poster-wide local donor harvest (no API), character-needle recovery on NoGlyph, safe casefold donors (CcOoSsUuVvWwXxZz). Susan OK. Desk smoke PASS (donor harvest visible on Gettysburg).
+
+## Sam morning checklist
+
+1. Final look at PR #2 / #3 / #4.
+2. Do **not** merge main until you say.
+3. No new engine work until you clear the stack.
+4. Grade Desk stays parked until QC is finished.
