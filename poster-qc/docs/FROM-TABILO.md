@@ -1,39 +1,32 @@
-﻿# FROM-TABILO — poster-qc skewed apply_fix / Mississippi
+# FROM-TABILO - poster-qc deferred #3-5
 
-**Branch:** `tabilo/qc-nameplates`  
-**PR:** https://github.com/edestiny75-cloud/jbg-images/pull/2  
-**Date:** 2026-09-13 (ET)  
-**Scope:** `poster-qc/` only. No main merge.
+**Branch:** 	abilo/qc-3-5 (off 	abilo/qc-nameplates @ 3f8ee88)  
+**PR:** (opening)  
+**Date:** 2026-09-13 evening (ET)  
+**Scope:** poster-qc/ only. No main merge.
 
-## Pytest
-`pytest tests/poster_qc -q` → **106 passed**
+## Prior lane (#2) — accepted DONE
+Susan accepted **PR #2** nameplate+map-locate lane as DONE (2026-09-13 evening).  
+- pytest **106**, commit 3f8ee88, https://github.com/edestiny75-cloud/jbg-images/pull/2  
+- PR #2 stays **OPEN**, no main merge until Sam/Susan say.  
+- Steep skew >=45 deg clean NEEDS_HUMAN is correct. Atlantic unchased.
 
-## Re-smoke (final)
-`C:\Users\Jamsp\OneDrive\Desktop\JBG_QC_INBOX\jobs\smoke-skew-20260913-183527`  
-Mississippi: **still NEEDS_HUMAN** (clean escalate — see below).  
-Atlantic COASTLINE→OCEAN: review/fact (not auto-fix).
+## This lane (#3-5)
+New branch so #2 can merge cleanly later without mixing.
 
-## Root cause of verify fail (why auto-fix cannot FIXED yet)
-Locate for MISSSSIPPI→MISSISSIPPI **passes** (skew-aware line+word checks).  
-`_apply_fix_skewed` (deskew → glyphclone/surgical → warp-back) still fails verify because:
+### Pytest
+pytest tests/poster_qc -q -> **112 passed**
 
-1. **Warp-back** of any edit band on a ~−64° label that sits on the blue river paints visible parallelograms / broken river (AABB fill was worst; delta-only mask is better but still not invisible next to chrome).
-2. **Double cubic warp** softens letterforms; Claude still reads MISSSSIPPI after clone/surgical insert.
-3. River ink under `CELL_EXT` poisoned glyph cells until clamped.
+### What landed
+- **#3 re-inspect known errors:** 
+un_poster re-inspect now passes known= into inspect_poster and _policy(n, known) so instruction-file must-finds stay located and auto-fix eligible after a fix round.
+- **#4 fact->spelling promote:** _looks_like_spelling promotes near-miss typos (Mississipi->Mississippi) from act to spelling for auto-fix; real fact swaps (Congress->House) stay 
+eview. Known instruction pairs force spelling eligibility even if Claude said fact.
+- **#5 locate punctuation hardening:** _normalize_index matches by folded core (not substring), then syncs attached punctuation from the printed line token onto wrong/right (_with_printed_punct) so locate/glyphclone see the ink as printed.
 
-So this is **true human judgment / Higgsfield handoff**, not a locate miss.
+### Tests
+	ests/poster_qc/test_qc_3_5.py (6 new).
 
-## What we shipped on the branch
-- Warped delta-only compose (`_warp_edit_onto_sub`); restore outside line band; clamp erase to line; tight `CELL_EXT` on skew.
-- Prefer glyphclone on mild skew; **skip OpenAI inpaint** on skew; **steep stylized |angle|≥45 → higgsfield only** (no doomed patch attempts).
-- `surgical_insert` for pure insert edits; min cell width + median insert donors.
-- Fix duplicate upright word-list collapsing slack to ~15px (`NoGlyph`).
-- Rank skewed locate cands by upright width/height.
-- Tests in `test_apply_fix_skewed.py`.
-
-## Desk engine
-Synced into `C:\Users\Jamsp\OneDrive\Desktop\Claude Code\poster_qc`.
-
-## Sam decisions
-- Review PR #2; do not merge main until approved.
-- Mississippi remains human/Higgsfield until a non-warp (stamp-rotated glyphs) path exists.
+### Sam decisions
+- Review new PR for #3-5; do not merge main until approved.
+- Keep PR #2 open/separate until Sam/Susan say merge.
