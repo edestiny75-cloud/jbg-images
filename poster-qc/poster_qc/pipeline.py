@@ -4,7 +4,7 @@ from PIL import Image, ImageDraw
 from . import config
 from .ingest import load_pages, sku_from_path
 from .inspect import inspect_poster, find_lines_containing, read_line
-from .locate import locate_candidates, set_polarity, resolve_polarity, tighten_region, infer_polarity
+from .locate import locate_candidates, set_polarity, resolve_polarity, tighten_region, infer_polarity, deskew_image, map_box_affine, paper_fill_color
 from difflib import SequenceMatcher
 import re as _re
 from .locate import locate_word
@@ -147,19 +147,52 @@ WORD_MATCH_MIN = 0.7
 WORD_MATCH_STRONG = 0.9     # required when the line read-back only loosely matched
 LINE_MATCH_SOFT = 0.5       # below this a candidate line is rejected outright
 
+def _search_region(img: Image.Image, f: Finding) -> tuple:
+    """Padded locate region. Prefer a tighter box_bbox for tall map-label crops (Claude's line bbox is
+    often a long vertical strip that includes river and chrome)."""
+    src = f.bbox
+    if f.box_bbox:
+        bx0, by0, bx1, by1 = f.box_bbox
+        x0, y0, x1, y1 = f.bbox
+        b_area = max((bx1 - bx0) * (by1 - by0), 1)
+        a_area = max((x1 - x0) * (y1 - y0), 1)
+        # Use box_bbox when it is meaningfully tighter, especially for tall/rotated labels.
+        if b_area < 0.85 * a_area or (by1 - by0) > (bx1 - bx0) * 1.1:
+            src = f.box_bbox
+    x0, y0, x1, y1 = src
+    tall = (y1 - y0) >= (x1 - x0) * 1.15
+    # Tall map labels need little vertical pad (extra river/chrome confuses deskew). Wide nameplate /
+    # body boxes still use REGION_PAD_Y because Claude often clips ascenders.
+    pad_frac = 0.12 if tall else config.REGION_PAD_Y
+    pad_y = max(6, int(round((y1 - y0) * pad_frac)))
+    return (max(x0 - config.REGION_PAD_X, 0), max(y0 - pad_y, 0),
+            min(x1 + config.REGION_PAD_X, img.width), min(y1 + pad_y, img.height))
+
+
 def _locate_checked(img: Image.Image, f: Finding, client, model: str, cache: dict | None = None):
     """Locate the word, then have Claude read the chosen line crop and confirm it matches the transcript.
     Tries up to three candidate lines. Cached per finding so retries across backends do not re-read."""
     if cache is not None and f.id in cache:
         return cache[f.id]
-    x0, y0, x1, y1 = f.bbox
-    pad_y = max(6, int(round((y1 - y0) * config.REGION_PAD_Y)))
-    region = (max(x0 - config.REGION_PAD_X, 0), max(y0 - pad_y, 0), min(x1 + config.REGION_PAD_X, img.width), min(y1 + pad_y, img.height))
+    region = _search_region(img, f)
+    rw, rh = region[2] - region[0], region[3] - region[1]
+    tall = rh >= rw * 1.15
     # Light cream lettering on a dark ribbon/plate: Claude's box often includes parchment around the
     # cell. Tightening to the dark plate keeps Otsu / glyph splits on the lettering, not the plaque.
+    # Skip tighten on tall map-label crops: the "dark plate" heuristic latches onto rivers/borders.
     pol = getattr(f, "text_color", None) or infer_polarity(img.crop(region))
-    region = tighten_region(img, region, pol)
+    if tall:
+        pol = "dark"
+        f.text_color = "dark"
+        set_polarity("dark")
+    else:
+        region = tighten_region(img, region, pol)
+        set_polarity(pol)
     cands = locate_candidates(img, region, f.line_text, f.word_index)
+    # Skewed map-label hits force dark ink polarity for glyphclone / donor downstream.
+    if cands and getattr(cands[0], "skew_angle", 0):
+        f.text_color = "dark"
+        set_polarity("dark")
     last = ""
     _normalize_index(f)
     reads: list[str] = []
@@ -221,9 +254,7 @@ def _locate_checked(img: Image.Image, f: Finding, client, model: str, cache: dic
 
 def _relocate(img: Image.Image, f: Finding, wi: int, ref):
     """Same confirmed line, different word index."""
-    x0, y0, x1, y1 = f.bbox
-    pad_y = max(6, int(round((y1 - y0) * config.REGION_PAD_Y)))
-    region = (max(x0 - config.REGION_PAD_X, 0), max(y0 - pad_y, 0), min(x1 + config.REGION_PAD_X, img.width), min(y1 + pad_y, img.height))
+    region = _search_region(img, f)
     pol = getattr(f, "text_color", None) or infer_polarity(img.crop(region))
     region = tighten_region(img, region, pol)
     try:
@@ -234,11 +265,102 @@ def _relocate(img: Image.Image, f: Finding, wi: int, ref):
         return None
     return None
 
+def _upright_loc(loc):
+    """WordLocation in deskewed-crop coords for skewed map labels."""
+    from .locate import WordLocation
+    return WordLocation(
+        word_box=loc.upright_word_box,
+        erase_box=loc.upright_erase_box,
+        line_box=loc.upright_line_box,
+        baseline=loc.upright_baseline if loc.upright_baseline is not None else 0,
+        ink_color=loc.ink_color,
+        words=list(loc.upright_words or []),
+    )
+
+
+def _apply_fix_skewed(img: Image.Image, f: Finding, loc, backend: str, openai_client, client,
+                       model: str, expected_line: str) -> tuple[Image.Image, tuple, str]:
+    """Clone/inpaint on a deskewed crop, then warp the edit back onto the poster."""
+    import cv2
+    import numpy as np
+    from .glyphclone import GlyphLibrary, clone_fix, NoGlyph
+    from .inspect import find_lines_containing
+    from .inpaint_openai import inpaint_word
+    from .retype import retype_word
+
+    rx0, ry0, rx1, ry1 = loc.skew_region
+    sub = img.crop(loc.skew_region)
+    fill = paper_fill_color(sub)
+    rot, M, Minv = deskew_image(sub, loc.skew_angle, fill=fill)
+    uloc = _upright_loc(loc)
+    set_polarity("dark")
+    if backend == "glyphclone":
+        lines = _locate_lines(rot, [])  # own word supplies glyphs; map labels rarely share a text box
+        # Also try locating the upright line itself as a donor source
+        try:
+            from .locate import locate_word as _lw
+            own_line = _lw(rot, uloc.line_box, f.line_text, 0)
+            lines = [(f.line_text, own_line.line_box, own_line.words)]
+        except Exception:
+            lines = [(f.line_text, uloc.line_box, uloc.words)]
+        lib = GlyphLibrary.from_lines(rot, lines)
+        box_right = rot.width
+        alt = getattr(f, "read_line_token", None) or getattr(f, "read_wrong", None)
+        try:
+            out_rot, box_rot = clone_fix(rot, uloc, f.wrong, f.right, lib, box_right=box_right, alt_wrong=alt)
+        except NoGlyph as e:
+            if len(str(e)) == 1:
+                needle = f.right.strip('.,;:!?"\'()')
+                extra = find_lines_containing(client, img, needle, model=config.DEFAULT_MODEL)
+                # Map extra lines is hard under skew; re-raise if own glyphs insufficient
+                raise
+            raise
+        from . import glyphclone as _gc
+        info = dict(_gc.LAST_INFO)
+        prompt = f"glyphclone-skew@{loc.skew_angle:.0f} {info.get('wrong_used', f.wrong)!r} -> {f.right!r}"
+    elif backend == "retype":
+        out_rot, box_rot = retype_word(rot, uloc, f.line_text, f.word_index, f.right)
+        prompt = f"retype-skew@{loc.skew_angle:.0f} {f.wrong!r} -> {f.right!r}"
+    elif backend == "inpaint_openai":
+        out_rot, box_rot, prompt = inpaint_word(
+            rot, uloc.word_box, uloc.line_box, f.wrong, f.right, expected_line, client=openai_client
+        )
+        prompt = f"inpaint-skew@{loc.skew_angle:.0f} " + (prompt or "")
+    else:
+        raise ValueError(backend)
+
+    # Warp edited upright crop back; paste only where the edit mask is hot.
+    arr_rot = np.asarray(out_rot.convert("RGB"))
+    arr_sub = np.asarray(sub.convert("RGB"))
+    back = cv2.warpAffine(arr_rot, Minv, (sub.width, sub.height), flags=cv2.INTER_CUBIC,
+                          borderMode=cv2.BORDER_REFLECT)
+    # Mask: pixels that differ from a warp of the pre-edit deskewed image
+    pre = cv2.warpAffine(np.asarray(rot.convert("RGB")), Minv, (sub.width, sub.height),
+                         flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REFLECT)
+    delta = np.abs(back.astype(np.int16) - pre.astype(np.int16)).max(axis=2)
+    mask = delta > 6
+    # Also keep a dilated cover of the mapped erase box so anti-aliased edges land.
+    ex = map_box_affine(uloc.erase_box, Minv)
+    x0, y0 = max(ex[0] - 2, 0), max(ex[1] - 2, 0)
+    x1, y1 = min(ex[2] + 2, sub.width), min(ex[3] + 2, sub.height)
+    mask[y0:y1, x0:x1] = True
+    composed = arr_sub.copy()
+    composed[mask] = back[mask]
+    out = img.copy()
+    from PIL import Image as _Image
+    out.paste(_Image.fromarray(composed), (rx0, ry0))
+    box_full = map_box_affine(box_rot if isinstance(box_rot, tuple) else tuple(box_rot), Minv)
+    box_full = (box_full[0] + rx0, box_full[1] + ry0, box_full[2] + rx0, box_full[3] + ry0)
+    return out, box_full, prompt
+
+
 def apply_fix(img: Image.Image, f: Finding, backend: str, openai_client, client,
               model: str = config.DEFAULT_MODEL, loc_cache: dict | None = None) -> tuple[Image.Image, tuple, str]:
     loc = _locate_checked(img, f, client, model, loc_cache)
     f.word_box, f.line_box = loc.word_box, loc.line_box
     expected_line = " ".join(f.line_text.split()[:f.word_index] + [f.right] + f.line_text.split()[f.word_index + 1:])
+    if getattr(loc, "skew_angle", 0) and loc.skew_region and loc.upright_word_box:
+        return _apply_fix_skewed(img, f, loc, backend, openai_client, client, model, expected_line)
     if backend == "glyphclone":
         lines = _locate_lines(img, f.box_lines)
         lib = GlyphLibrary.from_lines(img, lines)
@@ -251,7 +373,7 @@ def apply_fix(img: Image.Image, f: Finding, backend: str, openai_client, client,
             # character anywhere yet (see glyphclone.GlyphLibrary.get raising NoGlyph(ch)); other NoGlyph
             # messages (overflow past available slack) mean cloning can't work here at all, so re-raise.
             if len(str(e)) == 1:
-                needle = f.right.strip(".,;:!?\"'()")
+                needle = f.right.strip('.,;:!?"\'()')
                 extra = find_lines_containing(client, img, needle, model=config.DEFAULT_MODEL)
                 lines = lines + _locate_lines(img, extra)
                 lib = GlyphLibrary.from_lines(img, lines)

@@ -6,12 +6,21 @@ from .models import BBox
 
 @dataclass
 class WordLocation:
-    word_box: BBox          # tight ink box of the word, full-image coords
+    word_box: BBox          # tight ink box of the word, full-image coords (AABB; may be diagonal text)
     erase_box: BBox         # box to erase: word box widened to half-gaps, full line band vertically
     line_box: BBox          # ink box of the whole line
     baseline: int           # full-image y
     ink_color: tuple[int, int, int]
     words: list[BBox]       # all word boxes on the line (full-image coords)
+    # Map-label skew: when the line is rotated, locate deskews a crop, finds upright boxes, then
+    # stores both the full-image AABB (for Claude read-back) and the upright boxes (for clone/inpaint).
+    skew_angle: float = 0.0
+    skew_region: BBox | None = None
+    upright_word_box: BBox | None = None
+    upright_erase_box: BBox | None = None
+    upright_line_box: BBox | None = None
+    upright_words: list[BBox] | None = None
+    upright_baseline: int | None = None
 
 def otsu(gray: np.ndarray) -> int:
     hist = np.bincount(gray.ravel(), minlength=256).astype(np.float64)
@@ -362,8 +371,8 @@ def strip_tall_components(mask: np.ndarray, factor: float = 2.5) -> np.ndarray:
         return mask
     return mask & ~np.isin(labels, tall)
 
-def locate_candidates(img: Image.Image, region: BBox, line_text: str, word_index: int, max_n: int = 3) -> list[WordLocation]:
-    """Candidate word locations inside `region`, best first. Lines are ranked by (a) band height
+def _locate_candidates_axis(img: Image.Image, region: BBox, line_text: str, word_index: int, max_n: int = 3) -> list[WordLocation]:
+    """Axis-aligned candidate word locations inside `region`, best first. Lines are ranked by (a) band height
     plausibility, (b) natural word count vs the transcript, (c) relative word-width profile vs the
     transcript rendered in a serif font, (d) closeness to the region's vertical centre. Claude's line
     boxes are loose, so position alone is not enough; the pipeline confirms the winner by reading it."""
@@ -419,6 +428,205 @@ def locate_candidates(img: Image.Image, region: BBox, line_text: str, word_index
     if not out:
         raise ValueError("no usable text line in region")
     return out
+
+def _norm_angle_180(a: float) -> float:
+    """Map degrees into (-90, 90]."""
+    return ((a + 90.0) % 180.0) - 90.0
+
+
+def deskew_image(img: Image.Image, angle: float, fill: tuple[int, int, int] = (210, 190, 160)):
+    """Rotate `img` by `angle` degrees (CCW) with expand. Returns (rotated PIL, M, Minv) where M maps
+    original (x,y,1) -> rotated and Minv is the inverse affine (OpenCV 2x3)."""
+    import cv2
+    arr = np.asarray(img.convert("RGB"))
+    h, w = arr.shape[:2]
+    center = (w / 2.0, h / 2.0)
+    M = cv2.getRotationMatrix2D(center, angle, 1.0)
+    cos_a, sin_a = abs(M[0, 0]), abs(M[0, 1])
+    nw = int(h * sin_a + w * cos_a)
+    nh = int(h * cos_a + w * sin_a)
+    M[0, 2] += (nw / 2.0) - center[0]
+    M[1, 2] += (nh / 2.0) - center[1]
+    border = [int(c) for c in fill]
+    out = cv2.warpAffine(arr, M, (nw, nh), flags=cv2.INTER_CUBIC, borderValue=border)
+    Minv = cv2.invertAffineTransform(M)
+    return Image.fromarray(out), M, Minv
+
+
+def map_box_affine(box: BBox, M) -> BBox:
+    """Axis-aligned bounding box of `box`'s four corners after the 2x3 affine `M`."""
+    import math
+    pts = np.array([[box[0], box[1]], [box[2], box[1]], [box[2], box[3]], [box[0], box[3]]], dtype=np.float64)
+    ones = np.ones((4, 1), dtype=np.float64)
+    mapped = (M @ np.hstack([pts, ones]).T).T
+    xs, ys = mapped[:, 0], mapped[:, 1]
+    return (int(math.floor(xs.min())), int(math.floor(ys.min())),
+            int(math.ceil(xs.max())), int(math.ceil(ys.max())))
+
+
+def paper_fill_color(img: Image.Image) -> tuple[int, int, int]:
+    """Median non-ink colour for deskew borders (avoids black bars)."""
+    arr = np.asarray(img.convert("RGB"))
+    m = ink_mask(img)
+    px = arr[~m] if (~m).any() else arr.reshape(-1, 3)
+    return tuple(int(v) for v in np.median(px, axis=0))
+
+
+def estimate_pca_angle(img: Image.Image) -> float | None:
+    """Principal-axis angle (degrees) of the current-polarity ink mask, or None if too little ink."""
+    import math
+    m = ink_mask(img)
+    if float(m.mean()) < 0.004 or float(m.mean()) > 0.55:
+        return None
+    ys, xs = np.where(m)
+    if xs.size < 30:
+        return None
+    pts = np.column_stack([xs.astype(np.float64), ys.astype(np.float64)])
+    cov = np.cov((pts - pts.mean(axis=0)).T)
+    evals, evecs = np.linalg.eigh(cov)
+    if evals.max() < 1e-6:
+        return None
+    axis = evecs[:, int(np.argmax(evals))]
+    return float(math.degrees(math.atan2(axis[1], axis[0])))
+
+
+def _score_deskew_angle(rot: Image.Image, line_text: str) -> float:
+    """How well `rot` (already deskewed) shows a horizontal transcript-shaped ink band."""
+    from .fonts import load_font
+    m = strip_edge_slivers(strip_tall_components(strip_rules(ink_mask(rot))))
+    n_words = max(len(line_text.split()), 1)
+    best = -1e9
+    for y0, y1 in text_lines(m):
+        h = y1 - y0
+        if h < 10:
+            continue
+        nat = natural_word_count(m, y0, y1)
+        words = split_words(m, y0, y1, n_words)
+        if not words:
+            continue
+        span = words[-1][1] - words[0][0]
+        frac = float(m[y0:y1].mean())
+        aspect = span / max(h, 1)
+        fill = span / max(rot.width, 1)
+        expected = float(load_font("georgiab", max(int(h * 0.6), 10)).getlength(line_text))
+        width_ratio = span / max(expected, 1.0)
+        s = 0.0
+        s += max(0.0, 10.0 - abs(nat - n_words) * 5.0)
+        s += 28.0 * fill
+        if fill < 0.55:
+            s -= 25.0
+        s += 18.0 * max(0.0, 1.0 - abs(1.0 - width_ratio))
+        if aspect < 3.5:
+            s -= 12.0
+        if 0.05 <= frac <= 0.36:
+            s += 5.0
+        elif frac > 0.45:
+            s -= 8.0
+        if 14 <= h <= 70:
+            s += 4.0
+        if s > best:
+            best = s
+    return best
+
+
+def choose_deskew_angle(img: Image.Image, line_text: str) -> float | None:
+    """Pick a CCW rotation that makes map-label lettering horizontal, or None if nothing beats flat."""
+    pca = estimate_pca_angle(img)
+    if pca is None:
+        return None
+    seeds = [
+        _norm_angle_180(-pca),
+        _norm_angle_180(-pca + 90),
+        _norm_angle_180(-pca - 90),
+        _norm_angle_180(pca),
+        _norm_angle_180(pca + 90),
+    ]
+    fill = paper_fill_color(img)
+    ranked: list[tuple[float, float]] = []
+    seen: set[int] = set()
+    for seed in seeds:
+        for delta in range(-22, 23, 1):
+            a = int(round(_norm_angle_180(seed + delta)))
+            if a in seen or abs(a) < 12:
+                continue
+            seen.add(a)
+            rot, _, _ = deskew_image(img, float(a), fill=fill)
+            ranked.append((_score_deskew_angle(rot, line_text), float(a)))
+    if not ranked:
+        return None
+    ranked.sort(reverse=True)
+    best_score, best_angle = ranked[0]
+    flat = _score_deskew_angle(img, line_text)
+    if best_score < 40.0 or best_score < flat + 8.0:
+        return None
+    return best_angle
+
+
+def _offset_box(box: BBox, dx: int, dy: int) -> BBox:
+    return (box[0] + dx, box[1] + dy, box[2] + dx, box[3] + dy)
+
+
+def _locate_candidates_skewed(img: Image.Image, region: BBox, line_text: str, word_index: int,
+                              max_n: int = 3) -> list[WordLocation]:
+    """Deskew a tall/rotated map-label crop, locate upright, map AABB boxes back to full image."""
+    rx0, ry0, rx1, ry1 = region
+    sub = img.crop(region)
+    if sub.width < 16 or sub.height < 16:
+        return []
+    prev = POLARITY
+    try:
+        # Map labels are almost always dark ink on parchment; light polarity misreads the paper as ink.
+        set_polarity("dark")
+        angle = choose_deskew_angle(sub, line_text)
+        if angle is None:
+            return []
+        fill = paper_fill_color(sub)
+        rot, M, Minv = deskew_image(sub, angle, fill=fill)
+        upright = _locate_candidates_axis(rot, (0, 0, rot.width, rot.height), line_text, word_index, max_n=max_n)
+        out: list[WordLocation] = []
+        for loc in upright:
+            def to_full(b: BBox, _Minv=Minv, _rx0=rx0, _ry0=ry0) -> BBox:
+                local = map_box_affine(b, _Minv)
+                return _offset_box(local, _rx0, _ry0)
+
+            out.append(WordLocation(
+                word_box=to_full(loc.word_box),
+                erase_box=to_full(loc.erase_box),
+                line_box=to_full(loc.line_box),
+                baseline=to_full((0, loc.baseline, 1, loc.baseline + 1))[1],
+                ink_color=loc.ink_color,
+                words=[to_full(w) for w in loc.words],
+                skew_angle=float(angle),
+                skew_region=region,
+                upright_word_box=loc.word_box,
+                upright_erase_box=loc.erase_box,
+                upright_line_box=loc.line_box,
+                upright_words=list(loc.words),
+                upright_baseline=loc.baseline,
+            ))
+        return out
+    finally:
+        set_polarity(prev)
+
+
+def locate_candidates(img: Image.Image, region: BBox, line_text: str, word_index: int, max_n: int = 3) -> list[WordLocation]:
+    """Candidate word locations inside `region`, best first.
+
+    Tall crops (map labels along rivers, etc.) are often rotated far from horizontal: try a deskew
+    path first and prefer it when it finds usable candidates. Otherwise fall back to axis-aligned
+    profile locate (body text, nameplates, banners).
+    """
+    rx0, ry0, rx1, ry1 = region
+    rw, rh = max(rx1 - rx0, 1), max(ry1 - ry0, 1)
+    if rh >= rw * 1.15:
+        try:
+            skewed = _locate_candidates_skewed(img, region, line_text, word_index, max_n=max_n)
+        except Exception:
+            skewed = []
+        if skewed:
+            return skewed
+    return _locate_candidates_axis(img, region, line_text, word_index, max_n=max_n)
+
 
 def locate_word(img: Image.Image, region: BBox, line_text: str, word_index: int) -> WordLocation:
     return locate_candidates(img, region, line_text, word_index, max_n=1)[0]
