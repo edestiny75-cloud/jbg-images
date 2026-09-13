@@ -604,6 +604,14 @@ def _locate_candidates_skewed(img: Image.Image, region: BBox, line_text: str, wo
                 upright_words=list(loc.words),
                 upright_baseline=loc.baseline,
             ))
+        # Prefer wide+short upright words (real map labels) over thin bands / river-aligned misses.
+        def _skew_key(c: WordLocation):
+            uw = c.upright_word_box
+            if not uw:
+                return (0, 0)
+            w, h = max(uw[2] - uw[0], 1), max(uw[3] - uw[1], 1)
+            return (w / h, w)
+        out.sort(key=_skew_key, reverse=True)
         return out
     finally:
         set_polarity(prev)
