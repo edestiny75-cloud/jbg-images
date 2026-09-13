@@ -89,6 +89,29 @@ def _locate_lines(img: Image.Image, entries: list[dict]) -> list[tuple[str, tupl
     return lines
 
 
+def _poster_donor_line_entries(findings: list) -> list[dict]:
+    """All transcribed lines Claude already reported on this poster (every finding's box_lines +
+    own line). Harvesting donors from these avoids a vision round-trip when the missing letter
+    sits in another box on the same poster."""
+    out: list[dict] = []
+    seen: set[tuple] = set()
+    for f in findings:
+        entries = list(getattr(f, "box_lines", None) or [])
+        if getattr(f, "line_text", None) and getattr(f, "bbox", None):
+            entries.append({"text": f.line_text, "bbox": list(f.bbox)})
+        for e in entries:
+            text = (e.get("text") or "").strip()
+            bbox = e.get("bbox")
+            if not text or not bbox:
+                continue
+            key = (text, tuple(bbox))
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append({"text": text, "bbox": list(bbox)})
+    return out
+
+
 def _norm(t: str) -> str:
     return _re.sub(r"[^a-z0-9]+", " ", t.lower()).strip()
 
@@ -529,7 +552,8 @@ def _apply_fix_skewed(img: Image.Image, f: Finding, loc, backend: str, openai_cl
 
 
 def apply_fix(img: Image.Image, f: Finding, backend: str, openai_client, client,
-              model: str = config.DEFAULT_MODEL, loc_cache: dict | None = None) -> tuple[Image.Image, tuple, str]:
+              model: str = config.DEFAULT_MODEL, loc_cache: dict | None = None,
+              donor_lines: list | None = None) -> tuple[Image.Image, tuple, str]:
     loc = _locate_checked(img, f, client, model, loc_cache)
     f.word_box, f.line_box = loc.word_box, loc.line_box
     expected_line = " ".join(f.line_text.split()[:f.word_index] + [f.right] + f.line_text.split()[f.word_index + 1:])
@@ -537,6 +561,9 @@ def apply_fix(img: Image.Image, f: Finding, backend: str, openai_client, client,
         return _apply_fix_skewed(img, f, loc, backend, openai_client, client, model, expected_line)
     if backend == "glyphclone":
         lines = _locate_lines(img, f.box_lines)
+        # Poster-wide harvest from lines Claude already transcribed (other boxes) — no API cost.
+        if donor_lines:
+            lines = lines + _locate_lines(img, donor_lines)
         lib = GlyphLibrary.from_lines(img, lines)
         box_right = (f.box_bbox or f.bbox)[2]
         alt = getattr(f, "read_line_token", None) or getattr(f, "read_wrong", None)
@@ -547,8 +574,10 @@ def apply_fix(img: Image.Image, f: Finding, backend: str, openai_client, client,
             # character anywhere yet (see glyphclone.GlyphLibrary.get raising NoGlyph(ch)); other NoGlyph
             # messages (overflow past available slack) mean cloning can't work here at all, so re-raise.
             if len(str(e)) == 1:
-                needle = f.right.strip('.,;:!?"\'()')
-                extra = find_lines_containing(client, img, needle, model=config.DEFAULT_MODEL)
+                ch = str(e)
+                # Search for the missing CHARACTER anywhere (not only the full corrected word).
+                # Whole-word search missed common donors like "the" when fixing Busk→Bush.
+                extra = find_lines_containing(client, img, ch, model=config.DEFAULT_MODEL)
                 lines = lines + _locate_lines(img, extra)
                 lib = GlyphLibrary.from_lines(img, lines)
                 out, box = clone_fix(img, loc, f.wrong, f.right, lib, box_right=box_right, alt_wrong=alt)
@@ -556,7 +585,12 @@ def apply_fix(img: Image.Image, f: Finding, backend: str, openai_client, client,
                 raise
         from . import glyphclone as _gc
         info = dict(_gc.LAST_INFO)
-        return out, box, f"glyphclone {info.get('wrong_used', f.wrong)!r} -> {f.right!r}" + (f" (condensed x{info['squeeze']})" if info.get("squeeze") else "")
+        note = f"glyphclone {info.get('wrong_used', f.wrong)!r} -> {f.right!r}"
+        if info.get("squeeze"):
+            note += f" (condensed x{info['squeeze']})"
+        if info.get("casefold"):
+            note += f" (casefold {','.join(info['casefold'])})"
+        return out, box, note
     if backend == "retype":
         out, box = retype_word(img, loc, f.line_text, f.word_index, f.right)
         return out, box, f"retype {f.wrong!r} -> {f.right!r}"
@@ -667,7 +701,8 @@ def run_poster(path: str | Path, out_dir: str | Path, client, openai_client=None
                     continue
                 try:
                     before = img
-                    after, box, prompt = apply_fix(img, f, backend, openai_client, client, model=model, loc_cache=loc_cache)
+                    donors = _poster_donor_line_entries(res.findings)
+                    after, box, prompt = apply_fix(img, f, backend, openai_client, client, model=model, loc_cache=loc_cache, donor_lines=donors)
                     expected_line = " ".join(f.line_text.split()[:f.word_index] + [f.right] + f.line_text.split()[f.word_index + 1:])
                     note, gate = "", config.STYLE_GATE_MIN
                     if backend == "glyphclone":
@@ -699,7 +734,7 @@ def run_poster(path: str | Path, out_dir: str | Path, client, openai_client=None
                         from . import retype as _rt
                         _rt.ALLOW_DONOR = not _rt.ALLOW_DONOR
                         try:
-                            after2, box2, prompt2 = apply_fix(before, f, backend, openai_client, client, model=model, loc_cache=loc_cache)
+                            after2, box2, prompt2 = apply_fix(before, f, backend, openai_client, client, model=model, loc_cache=loc_cache, donor_lines=_poster_donor_line_entries(res.findings))
                             v2 = verify_fix(client, before, after2, box2, expected_line, model=model, min_style=gate, note=note)
                             ok2 = _verify_text_ok(v2.read_back, f.wrong, f.right)
                             passed2 = (v2.matches or ok2) and v2.style_score >= gate and outside_unchanged(before, after2, [box2])
