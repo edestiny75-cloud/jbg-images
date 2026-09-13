@@ -1,69 +1,40 @@
-# FROM-TABILO - poster-qc deferred #3-5
+﻿# FROM-TABILO - poster-qc missing glyphs
 
-**Branch:** tabilo/qc-3-5 (off tabilo/qc-nameplates @ 3f8ee88)  
-**PR:** https://github.com/edestiny75-cloud/jbg-images/pull/3  
+**Branch:** tabilo/qc-missing-glyphs (off tabilo/qc-3-5 @ ed86936)  
+**PR:** (fill after open)  
 **Date:** 2026-09-13 evening (ET)  
-**Scope:** poster-qc/ only. No main merge.
+**Scope:** poster-qc/ only. No main merge. PR #2 and #3 stay OPEN.
 
-## Prior lane (#2) - accepted DONE
-Susan accepted **PR #2** nameplate+map-locate lane as DONE (2026-09-13 evening).  
-- pytest **106**, commit 3f8ee88, https://github.com/edestiny75-cloud/jbg-images/pull/2  
-- PR #2 stays **OPEN**, no main merge until Sam/Susan say.  
-- Steep skew >=45 deg clean NEEDS_HUMAN is correct. Atlantic unchased.
+## Prior lanes
+- **PR #2** nameplates — OPEN, accepted DONE (pytest 106). Atlantic unchased.
+- **PR #3** (#3-5 re-inspect / fact→spelling / punct) — OPEN on `tabilo/qc-3-5` (pytest 112). Susan OK; desk smoke done.
 
-## This lane (#3-5)
-New branch so #2 can merge cleanly later without mixing.
+## This lane — missing glyphs
+Highest remaining engine gap from HANDOFF: when the corrected word needs a letter that is not in the finding's own text box, clone used to fall through to OpenAI inpaint / human (or only recover if the *whole corrected word* appeared elsewhere).
 
 ### Pytest
-pytest tests/poster_qc -q -> **112 passed**
+pytest tests/poster_qc -q → **121 passed**
 
-### What landed
-- **#3 re-inspect known errors:** run_poster re-inspect now passes known= into inspect_poster and _policy(n, known) so instruction-file must-finds stay located and auto-fix eligible after a fix round.
-- **#4 fact->spelling promote:** _looks_like_spelling promotes near-miss typos (Mississipi->Mississippi) from fact to spelling for auto-fix; real fact swaps (Congress->House) stay review. Known instruction pairs force spelling eligibility even if Claude said fact.
-- **#5 locate punctuation hardening:** _normalize_index matches by folded core (not substring), then syncs attached punctuation from the printed line token onto wrong/right (_with_printed_punct) so locate/glyphclone see the ink as printed.
+### Approach
+1. **Poster-wide local harvest (no API):** `_poster_donor_line_entries` gathers every finding's `box_lines` + own line. `apply_fix(..., donor_lines=)` merges those into the GlyphLibrary before cloning. Sibling boxes Claude already transcribed can donate letters with zero vision cost.
+2. **Character-needle recovery:** on `NoGlyph(ch)`, `find_lines_containing` is called with the missing *character* (not `f.right`). Prompt asks for lines that contain that character inside any word (e.g. `'h'` from "the house" for Busk→Bush).
+3. **Safe casefold donors:** `SAFE_CASEFOLD = CcOoSsUuVvWwXxZz` — opposite-case borrow only when the skeleton matches after size scaling. Shape-changers (H/h, A/a, …) stay NoGlyph → inpaint/human. Recorded in `LAST_INFO["casefold"]`.
+4. Helpers: `chars_needed_for_edit`, `GlyphLibrary.has` / `missing_in` / `absorb`.
 
-### Tests
-tests/poster_qc/test_qc_3_5.py (6 new).
+`USE_RETYPE` stays **False**. No OpenAI calls in tests. Script / width / low-res skipped per Susan.
 
-## Susan decisions (2026-09-13 ~6:47pm ET)
-1. Review **OK** on #3-5.
-2. Sync QC Desk from PR #3 branch `tabilo/qc-3-5` and run **ONE** smoke (civics / typo+punct).
-3. **No main merge** - keep PR #2 and #3 **OPEN**.
-4. Atlantic **unchased**.
+### Tests added
+- `test_glyphclone.py`: chars_needed, has/missing+casefold, get casefold, clone casefold, borrow from other known line, still raises when truly absent
+- `test_inspect.py`: char-needle prompt
+- `test_pipeline.py`: sibling-box harvest without vision; char-search not whole-word
 
-## Desk sync + smoke (Sam-Jams)
+### Remaining limits
+- Letter truly absent in that style → still inpaint / human.
+- Unsafe case pairs (H↔h etc.) not borrowed (would fail style gate).
+- Script / blackletter / painted lettering, width>15% flush, low-res — not in this PR.
+- Atlantic unchased.
+- Skewed map-label path does not yet merge poster-wide donors (deskew crop only).
 
-### Sync
-- Repo: `C:\dev\jbg-images` on `tabilo/qc-3-5` @ **1fc2d0197c342adfb0b7915e5fff7896152627f1**
-- Robocopy `poster-qc` -> `C:\Users\Jamsp\OneDrive\Desktop\JBG_QC_INBOX\desk\engine` (kept desk `.venv`, desk `.env` POSTER_QC_BACKEND=claude-code, desk `web`)
-- Desk restarted on `:8766` (claude-code backend)
-
-### Smoke
-- Poster: `demo\JBG-POS-LAM-GettysburgAddress_v3_TOFIX.png` (spelling+punct; known instructions for Pennsylvaia,/casualties)
-- Backend: claude-code
-- Job: `C:\Users\Jamsp\OneDrive\Desktop\JBG_QC_INBOX\jobs\20260913-184947-2f35ef`
-- Result: **NEEDS_HUMAN** (findings=5, fixed=1) - smoke **PASS** (ran clean; behaviors visible). Poster not CLEAN.
-
-| Finding | kind | status | note vs #3-5 |
-|---|---|---|---|
-| `Pennsylvaia,` -> `Pennsylvania,` | spelling | needs_human | #4 spelling (not fact); #5 comma kept on wrong/right; locate+fix attempted |
-| `casualties),` -> `casualties).` | grammar | **fixed** (glyphclone style=95) | #5 punct-only change located + auto-fixed |
-| `Everest,` -> `Everett,` | consistency | needs_human | fix attempted, style fail |
-| `Library` -> `White House (Bliss copy)` | fact | **review** | #4 real fact stays review / not auto-fix |
-| `minutes` -> `minutes.` | consistency | skipped | low conf |
-
-- **#3 re-inspect known:** after fix round, `re-inspect round 1: 5 finding(s)`; known instruction pairs stayed in play; new findings appeared under policy.
-- **#4 fact->spelling:** typo kept as spelling / auto-fix eligible; fact finding stayed review.
-- **#5 punct locate:** wrong/right carried printed punctuation; punct fix PASS.
-- Atlantic: not on this poster; left unchased per Susan (prior FrenchIndianWar Atlantic fact remains review-only).
-
-### Artifacts
-- `C:\Users\Jamsp\OneDrive\Desktop\JBG_QC_INBOX\jobs\20260913-184947-2f35ef\out\JBG-POS-LAM-GettysburgAddress_NEEDS_HUMAN.png`
-- `C:\Users\Jamsp\OneDrive\Desktop\JBG_QC_INBOX\jobs\20260913-184947-2f35ef\out\JBG-POS-LAM-GettysburgAddress_CHANGES.png`
-- `C:\Users\Jamsp\OneDrive\Desktop\JBG_QC_INBOX\jobs\20260913-184947-2f35ef\out\JBG-POS-LAM-GettysburgAddress_QC.html`
-- `C:\Users\Jamsp\OneDrive\Desktop\JBG_QC_INBOX\jobs\20260913-184947-2f35ef\out\JBG-POS-LAM-GettysburgAddress_QC.json`
-- `C:\Users\Jamsp\OneDrive\Desktop\JBG_QC_INBOX\jobs\20260913-184947-2f35ef\out\QC_Summary.xlsx`
-- crops under `C:\Users\Jamsp\OneDrive\Desktop\JBG_QC_INBOX\jobs\20260913-184947-2f35ef\out\_work\JBG-POS-LAM-GettysburgAddress\`
-
-### Sam decisions (still)
-- Keep PR #2 and #3 **OPEN**; do not merge main until Sam/Susan say.
+### Sam / Susan
+- Keep PR #2 and #3 **OPEN**; do not merge main.
+- Review this PR tip; base is `tabilo/qc-3-5`.

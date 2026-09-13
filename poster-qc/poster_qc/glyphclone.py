@@ -11,6 +11,22 @@ from .retype import ERASE_PAD
 class NoGlyph(Exception):
     pass
 
+# Opposite-case donors that stay invisible after size scaling (same skeleton in serif body copy).
+# Do NOT include A/a, E/e, R/r, H/h, N/n, … — those change shape and fail the style gate.
+SAFE_CASEFOLD = frozenset("CcOoSsUuVvWwXxZz")
+
+
+def chars_needed_for_edit(wrong: str, right: str) -> list[str]:
+    """Characters that clone_fix must draw fresh (insert/replace spans), unique, order preserved."""
+    need: list[str] = []
+    for tag, _i1, _i2, j1, j2 in SequenceMatcher(None, wrong, right, autojunk=False).get_opcodes():
+        if tag in ("replace", "insert"):
+            for ch in right[j1:j2]:
+                if ch not in need:
+                    need.append(ch)
+    return need
+
+
 @dataclass
 class Cell:
     char: str
@@ -41,10 +57,22 @@ class GlyphLibrary:
         return lib
 
     def get(self, ch: str, prefer: list[Cell] | None = None, target_w: int | None = None,
-            target_h: int | None = None) -> Cell:
+            target_h: int | None = None, allow_casefold: bool = True) -> Cell:
         """Best cell for `ch`: same line height first, then width closest to target_w (the glyph being
-        replaced), then cells from the word itself. Raises NoGlyph(ch) when the character is unavailable."""
+        replaced), then cells from the word itself. Raises NoGlyph(ch) when the character is unavailable.
+
+        When the exact character is absent, SAFE_CASEFOLD letters may borrow their opposite case
+        (e.g. 'S' for 's') — those skeletons match after size scaling. Shape-changing pairs like
+        A/a or H/h are never casefolded.
+        """
         pool = [c for c in (prefer or []) if c.char == ch] + [c for c in self.cells.get(ch, []) if c not in (prefer or [])]
+        casefold_used = False
+        if not pool and allow_casefold and ch in SAFE_CASEFOLD:
+            alt = ch.swapcase()
+            pool = [c for c in (prefer or []) if c.char == alt] + [
+                c for c in self.cells.get(alt, []) if c not in (prefer or [])
+            ]
+            casefold_used = bool(pool)
         if not pool:
             raise NoGlyph(ch)
         own_y = prefer[0].line_y if prefer else -1
@@ -57,7 +85,32 @@ class GlyphLibrary:
             # then anywhere else; a proportionally-guessed (unclean) foreign cell is a last resort
             tier = 0 if (own and w_diff <= 3) else 1 if (same_line and w_diff <= 3) else 2
             return (h_pen, 0 if (own or c.clean) else 1, tier, w_diff, 0 if own else 1)
-        return min(pool, key=key)
+        best = min(pool, key=key)
+        if casefold_used:
+            LAST_INFO.setdefault("casefold", []).append(f"{best.char}->{ch}")
+        return best
+
+    def has(self, ch: str, allow_casefold: bool = True) -> bool:
+        """True when an exact (or safe casefold) donor cell exists for `ch`."""
+        if self.cells.get(ch):
+            return True
+        if allow_casefold and ch in SAFE_CASEFOLD and self.cells.get(ch.swapcase()):
+            return True
+        return False
+
+    def missing_in(self, text: str, allow_casefold: bool = True) -> list[str]:
+        """Ordered unique characters of `text` with no usable donor in this library."""
+        out: list[str] = []
+        for ch in text:
+            if ch not in out and not self.has(ch, allow_casefold=allow_casefold):
+                out.append(ch)
+        return out
+
+    def absorb(self, other: "GlyphLibrary") -> "GlyphLibrary":
+        """Merge another library's cells into this one (in place) and return self."""
+        for ch, cells in other.cells.items():
+            self.cells.setdefault(ch, []).extend(cells)
+        return self
 
 def _baseline(mask: np.ndarray) -> int:
     band = mask.sum(axis=1)
