@@ -1,7 +1,7 @@
 # FROM-TABILO - poster-qc deferred #3-5
 
 **Branch:** 	abilo/qc-3-5 (off 	abilo/qc-nameplates @ 3f8ee88)  
-**PR:** (opening)  
+**PR:** https://github.com/edestiny75-cloud/jbg-images/pull/3  
 **Date:** 2026-09-13 evening (ET)  
 **Scope:** poster-qc/ only. No main merge.
 
