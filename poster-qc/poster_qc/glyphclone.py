@@ -551,3 +551,97 @@ def clone_fix(img: Image.Image, loc: WordLocation, wrong: str, right: str, lib: 
         changed = _union(changed, b)
     W, H = out.size
     return out, (max(changed[0], 0), max(changed[1], 0), min(changed[2], W), min(changed[3], H))
+
+DIGIT_HEIGHT_TOL = 0.12   # max |donor_ink_h / target_ink_h - 1| for invisible digit clones
+
+
+def is_short_date_token(text: str) -> bool:
+    """True for short digit-heavy tokens like YYYY-YYYY / 1743-1B26 (typo dates)."""
+    if not text or len(text) > 12:
+        return False
+    digits = sum(ch.isdigit() for ch in text)
+    # allow hyphen and up to two non-digits (typo letter, en-dash, etc.)
+    return digits >= 4 and (len(text) - digits) <= 2
+
+
+def best_digit_donor(lib: "GlyphLibrary", ch: str, target_h: int, target_w: int | None = None,
+                     prefer: list[Cell] | None = None, max_scale_dev: float = DIGIT_HEIGHT_TOL) -> Cell:
+    """Pick a digit donor whose ink height matches `target_h` within max_scale_dev.
+    Prefers clean (gap-separated) cells over proportional splits. Raises NoGlyph when no
+    size-matched donor exists ? caller escalates instead of upscaling a wrong-size digit."""
+    pool = [c for c in (prefer or []) if c.char == ch] + [c for c in lib.cells.get(ch, []) if c not in (prefer or [])]
+    if not pool:
+        raise NoGlyph(ch)
+    scored = []
+    for c in pool:
+        dh = c.box[3] - c.box[1]
+        h_ratio = abs(dh / target_h - 1.0) if target_h else 99.0
+        w_diff = 0 if target_w is None else abs((c.box[2] - c.box[0]) - target_w)
+        own = bool(prefer and c in prefer)
+        size_ok = h_ratio <= max_scale_dev
+        scored.append((0 if size_ok else 1, 0 if c.clean else 1, h_ratio, 0 if own else 1, w_diff, c))
+    scored.sort(key=lambda t: t[:5])
+    best = scored[0]
+    if best[0] != 0:
+        raise NoGlyph(f"no size-matched digit {ch!r} (best ratio {best[2]:.2f})")
+    return best[5]
+
+def surgical_digit_replace(img: Image.Image, loc: WordLocation, wrong: str, right: str, lib: GlyphLibrary,
+                           max_scale_dev: float = DIGIT_HEIGHT_TOL) -> tuple[Image.Image, BBox] | None:
+    """Replace only the differing glyphs in a short date token (equal-length replace ops).
+    Untouched digits stay put — no full-word erase (avoids the parchment 'patch' look).
+    Uses ink-aware erase on each old cell, then pastes a size-matched donor.
+    Returns None when the edit is not a pure equal-length replace (caller may fall back).
+    Raises NoGlyph when a needed digit has no size-matched donor (escalate to NEEDS_HUMAN)."""
+    from .retype import erase
+    if not (is_short_date_token(wrong) and is_short_date_token(right)):
+        return None
+    ops = SequenceMatcher(None, wrong, right, autojunk=False).get_opcodes()
+    replaces = [op for op in ops if op[0] == "replace"]
+    others = [op for op in ops if op[0] not in ("equal", "replace")]
+    if others or not replaces:
+        return None
+    for op in replaces:
+        if (op[2] - op[1]) != (op[4] - op[3]):
+            return None
+    own = _ensure_min_cell_width(segment_chars(img, loc.line_box, loc.word_box, wrong), loc.word_box)
+    if len(own) != len(wrong):
+        return None
+    out = img.copy()
+    LAST_INFO.clear()
+    LAST_INFO["wrong_used"] = wrong
+    LAST_INFO["surgical_digit"] = True
+    paper = _paper(img, loc.line_box)
+    changed: BBox | None = None
+    for _tag, i1, i2, j1, j2 in replaces:
+        for k, (old_ch, new_ch) in enumerate(zip(wrong[i1:i2], right[j1:j2])):
+            if old_ch == new_ch:
+                continue
+            old_cell = own[i1 + k]
+            tw = old_cell.box[2] - old_cell.box[0]
+            th = old_cell.box[3] - old_cell.box[1]
+            donor = best_digit_donor(lib, new_ch, target_h=th, target_w=tw, prefer=own, max_scale_dev=max_scale_dev)
+            dh = donor.box[3] - donor.box[1]
+            h_ratio = abs(dh / th - 1.0) if th else 0.0
+            # Tight ink-aware erase of just this glyph (erase() already masks to ink components).
+            ebox = erase(out, old_cell.box, halo=1, ext=0.15)
+            # Accepted donors are already within DIGIT_HEIGHT_TOL — keep native size.
+            # LANCZOS shrink softens stroke weight and fails the style gate (Founding Fathers 8).
+            sy = 1.0
+            nat_w = max(1, int(round((donor.box[2] - donor.box[0]) * sy)))
+            # Prefer old slot width when close (keeps date rhythm); else native donor width.
+            use_w = tw if (target_w := tw) and abs(nat_w - tw) <= max(2, tw * 0.2) else nat_w
+            x = old_cell.box[0] + max((tw - use_w) // 2, 0)
+            pasted = _paste_ink(out, img, donor, int(x), loc.baseline, width=use_w, sy=sy, paper=paper)
+            changed = pasted if changed is None else _union(changed, pasted)
+            changed = _union(changed, ebox)
+            LAST_INFO.setdefault("digit_fixes", []).append({
+                "from": old_ch, "to": new_ch, "h_ratio": round(h_ratio, 3), "sy": round(sy, 3),
+                "donor_h": dh, "target_h": th,
+            })
+    if changed is None:
+        return None
+    W, H = out.size
+    # small pad so outside_unchanged tolerates antialias fringe
+    changed = (max(changed[0] - 2, 0), max(changed[1] - 2, 0), min(changed[2] + 2, W), min(changed[3] + 2, H))
+    return out, changed

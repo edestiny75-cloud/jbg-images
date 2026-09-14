@@ -1,4 +1,4 @@
-import numpy as np
+﻿import numpy as np
 import pytest
 from PIL import Image
 from tests.poster_qc.synth import line_image
@@ -218,7 +218,7 @@ def test_get_casefold_uses_safe_opposite_case():
 
 
 def test_clone_uses_casefold_donor_for_safe_letter():
-    """cos -> Cos needs 'C'; only 'c' exists on the line — safe casefold supplies it."""
+    """cos -> Cos needs 'C'; only 'c' exists on the line â€” safe casefold supplies it."""
     img, f, _ = line_image("cos of angle")
     before = img.copy()
     loc = locate_word(img, (0, 0, img.width, img.height), "cos of angle", 0)
@@ -261,3 +261,115 @@ def test_clone_raises_when_glyph_truly_absent_even_with_casefold():
     assert not lib.has("h")
     with pytest.raises(NoGlyph):
         clone_fix(img, loc, "Busk", "Bush", lib, box_right=img.width)
+
+def test_is_short_date_token():
+    from poster_qc.glyphclone import is_short_date_token
+    assert is_short_date_token("1743-1826")
+    assert is_short_date_token("1743-1B26")
+    assert is_short_date_token("1732-1816")
+    assert not is_short_date_token("Pennsylvaia,")
+    assert not is_short_date_token("Busk")
+    assert not is_short_date_token("")
+
+
+def test_best_digit_donor_rejects_wrong_size():
+    from poster_qc.glyphclone import GlyphLibrary, Cell, best_digit_donor, NoGlyph
+    lib = GlyphLibrary()
+    # tiny 5 vs target height 30
+    lib.cells["5"] = [Cell("5", (0, 0, 8, 10), 10, 12, True, 0)]
+    with pytest.raises(NoGlyph, match="size-matched"):
+        best_digit_donor(lib, "5", target_h=30, max_scale_dev=0.12)
+    # matching height accepted
+    lib.cells["5"] = [Cell("5", (0, 0, 12, 30), 30, 32, True, 0)]
+    c = best_digit_donor(lib, "5", target_h=30, max_scale_dev=0.12)
+    assert c.box[3] - c.box[1] == 30
+
+
+def test_surgical_digit_replace_jeff_style_keeps_neighbors():
+    """B->8 on a date line: only the B slot changes; untouched digits stay pixel-identical."""
+    from poster_qc.glyphclone import GlyphLibrary, surgical_digit_replace, LAST_INFO
+    from poster_qc.retype import outside_unchanged
+    import numpy as np
+    from PIL import Image, ImageDraw, ImageFont
+    from tests.poster_qc.synth import PARCHMENT, INK, FONT
+
+    fnt = ImageFont.truetype(FONT, 28)
+    sheet = Image.new("RGB", (500, 260), PARCHMENT)
+    rng = np.random.default_rng(1)
+    a = np.asarray(sheet).astype(np.float32) + rng.normal(0, 3, (260, 500, 3))
+    sheet = Image.fromarray(np.clip(a, 0, 255).astype(np.uint8))
+    d = ImageDraw.Draw(sheet)
+    d.text((30, 40), "1743-1B26", font=fnt, fill=INK)
+    d.text((30, 120), "1735-1826", font=fnt, fill=INK)  # donor 8 same size
+    loc = locate_word(sheet, (20, 30, 280, 100), "1743-1B26", 0)
+    loc2 = locate_word(sheet, (20, 110, 280, 180), "1735-1826", 0)
+    lib = GlyphLibrary.from_lines(sheet, [
+        ("1743-1B26", loc.line_box, loc.words),
+        ("1735-1826", loc2.line_box, loc2.words),
+    ])
+    before = sheet.copy()
+    # snapshot an untouched neighbor digit ('4')
+    own = segment_chars(sheet, loc.line_box, loc.word_box, "1743-1B26")
+    four = own[2]  # '4'
+    before_four = np.asarray(sheet.crop(four.box)).copy()
+    out, box = surgical_digit_replace(sheet, loc, "1743-1B26", "1743-1826", lib)
+    assert out is not None
+    assert LAST_INFO.get("surgical_digit") is True
+    assert outside_unchanged(before, out, [box])
+    after_four = np.asarray(out.crop(four.box))
+    assert np.array_equal(before_four, after_four), "untouched digit must stay pixel-identical"
+    # change box should be local (not the whole word)
+    word_area = (loc.word_box[2] - loc.word_box[0]) * (loc.word_box[3] - loc.word_box[1])
+    box_area = (box[2] - box[0]) * (box[3] - box[1])
+    assert box_area < 0.55 * word_area
+
+
+def test_surgical_digit_replace_escalates_without_size_matched_donor():
+    """3->5 with no 5 in the library -> NoGlyph (clean escalate), not a bad upscale."""
+    from poster_qc.glyphclone import GlyphLibrary, surgical_digit_replace, NoGlyph
+    img, f, _ = line_image("1732-1816")
+    loc = locate_word(img, (0, 0, img.width, img.height), "1732-1816", 0)
+    lib = GlyphLibrary.from_lines(img, [("1732-1816", loc.line_box, loc.words)])
+    assert "5" not in lib.cells
+    with pytest.raises(NoGlyph):
+        surgical_digit_replace(img, loc, "1732-1816", "1752-1816", lib)
+
+
+def test_surgical_digit_replace_morris_with_harvested_five():
+    from poster_qc.glyphclone import GlyphLibrary, surgical_digit_replace, LAST_INFO
+    from poster_qc.retype import outside_unchanged
+    import numpy as np
+    from PIL import Image, ImageDraw, ImageFont
+    from tests.poster_qc.synth import PARCHMENT, INK, FONT
+
+    fnt = ImageFont.truetype(FONT, 28)
+    sheet = Image.new("RGB", (500, 260), PARCHMENT)
+    rng = np.random.default_rng(2)
+    a = np.asarray(sheet).astype(np.float32) + rng.normal(0, 3, (260, 500, 3))
+    sheet = Image.fromarray(np.clip(a, 0, 255).astype(np.uint8))
+    d = ImageDraw.Draw(sheet)
+    d.text((30, 40), "1732-1816", font=fnt, fill=INK)
+    d.text((30, 120), "1751-1836", font=fnt, fill=INK)  # donor 5
+    loc = locate_word(sheet, (20, 30, 280, 100), "1732-1816", 0)
+    loc2 = locate_word(sheet, (20, 110, 280, 180), "1751-1836", 0)
+    lib = GlyphLibrary.from_lines(sheet, [
+        ("1732-1816", loc.line_box, loc.words),
+        ("1751-1836", loc2.line_box, loc2.words),
+    ])
+    before = sheet.copy()
+    out, box = surgical_digit_replace(sheet, loc, "1732-1816", "1752-1816", lib)
+    assert LAST_INFO.get("digit_fixes")
+    assert LAST_INFO["digit_fixes"][0]["from"] == "3"
+    assert LAST_INFO["digit_fixes"][0]["to"] == "5"
+    assert LAST_INFO["digit_fixes"][0]["h_ratio"] <= 0.12
+    assert outside_unchanged(before, out, [box])
+
+def test_best_digit_donor_prefers_clean_over_unclean():
+    from poster_qc.glyphclone import GlyphLibrary, Cell, best_digit_donor
+    lib = GlyphLibrary()
+    unclean = Cell("8", (0, 0, 14, 30), 30, 32, False, 0)
+    clean = Cell("8", (40, 0, 54, 31), 31, 32, True, 10)
+    lib.cells["8"] = [unclean, clean]
+    c = best_digit_donor(lib, "8", target_h=30)
+    assert c is clean
+
