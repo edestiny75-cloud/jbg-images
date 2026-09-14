@@ -12,7 +12,7 @@
 - **PR #2** https://github.com/edestiny75-cloud/jbg-images/pull/2 — tabilo/qc-nameplates (OPEN)
 - **PR #3** https://github.com/edestiny75-cloud/jbg-images/pull/3 — tabilo/qc-3-5 (OPEN)
 - **PR #4** https://github.com/edestiny75-cloud/jbg-images/pull/4 — tabilo/qc-missing-glyphs (OPEN)
-- **PR #5** (this) — tabilo/qc-digit-fix — date/digit surgical + escalate (OPEN)
+- **PR #5** https://github.com/edestiny75-cloud/jbg-images/pull/5 — tabilo/qc-digit-fix — date/digit surgical + escalate (OPEN)
 
 ---
 
@@ -63,4 +63,5 @@ Winner = **D + C**: invisible surgical fix when a size-matched digit donor exist
 - USE_RETYPE=False; invisible fixes only
 - Grade Desk parked; no main merge until Sam says
 - Script/blackletter, width>15%, low-res upscale, Atlantic still parked
+
 
