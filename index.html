@@ -5351,7 +5351,7 @@ function viewPacker(){
             ${i.actual<i.qty?`<span class="short">SHORT ${i.qty-i.actual}</span>`:'<span class="okmark">✓ full</span>'}</div>
           ${curLabels()?`<div class="oc-lbls">
             <button class="${i.label==='upc'?'done':''}" onclick="printLabel(${ab.box_no},${step},'upc')">Print UPC</button>
-            <button class="${i.label==='fnsku'?'done':''}" onclick="printLabel(${ab.box_no},${step},'fnsku')">Print FNSKU</button>
+            <button class="${i.label==='fnsku'?'done':''}" onclick="printLabel(${ab.box_no},${step},'fnsku')">Print FNSKU → Zebra</button>
             <button class="${i.label==='wps'?'done':''}" onclick="printLabel(${ab.box_no},${step},'wps')">Print WPS</button>
           </div>`:'<div class="oc-nolbl">Wholesale — no Amazon labels</div>'}
           <label class="oc-check"><input type="checkbox" ${i.picked?'checked':''} onchange="togglePick(${ab.box_no},${step})"> picked & in the box</label>
@@ -5584,7 +5584,7 @@ function detailBody(sku,opts){
     <div class="dfnsku-h">🏷️ AMAZON FNSKU — REFERENCE BARCODE FOR THIS MODEL</div>
     <div class="dfnsku-row"><div class="dfnsku-img"><img src="${esc(fnUrl(sku))}" onerror="this.parentNode.classList.add('ph')"></div>
     <div><div class="dfnsku-code">FNSKU: ${esc(b.fnskuCode||'—')}</div>
-    <div class="dfnsku-note">Print the full 30-up sheet to your <b>label printer</b> with the gold button below. The Print File goes to your <b>Fiery</b> separately — two different printers.</div></div></div></div>`:'';
+    <div class="dfnsku-note">Print single labels on the <b>Zebra</b>, or open the full 30-up sheet, with the buttons below. The Print File goes to your <b>Fiery</b> separately — two different printers.</div></div></div></div>`:'';
   const actions=(cfg.actions||[]).filter(a=>!(a.field==='pdf12x18' && !p.pdf12x18)).map(a=>`<a class="btn ${a.primary?'primary':'ghost'} sm" href="${esc(assetUrl(sku,a.field))}" target="_blank" rel="noopener">${esc(a.label)}</a>`).join('');
   const fnskuBtn=hasFn?`<a class="btn gold sm" href="${esc(fnPdfUrl(sku))}" target="_blank" rel="noopener">Open 30-Up FNSKU Sheet</a>`:'';
   const zebraBtn=p.fnskuCode?`<a class="btn ghost sm" href="${esc(fnSingleUrl(sku,'pdf'))}" target="_blank" rel="noopener">Open Single FNSKU Label</a><button class="btn gold sm" onclick="openZebraPrompt('${esc(sku).replace(/'/g,"\\'")}')">🏷 Print single → Zebra</button>`:'';
@@ -6022,7 +6022,7 @@ function boxFnskuHtml(ab){ if(!curLabels()||!ab||!ab.items.length) return '';
   const rows=ab.items.map(it=>{ const p=byRaw.get(it.sku)||{}; const code=p.fnskuCode||''; const has=!!(it.fnsku||p.fnsku||code); const qty=it.actual||it.qty; const sk=esc(it.sku).replace(/'/g,"\\'"); const isBundle=((p.sheets_db)||sheetsOf(it.sku))>1;
     return `<div class="bf-row">${thumbEl(it.thumb,it.sku)}<div class="bf-nm"><b>${esc(shortName(it))}</b>${isBundle?' <span class="bf-btag">📦 BUNDLE — one FNSKU</span>':''} <code>${esc(it.sku)}</code>${code?` · FNSKU <b>${esc(code)}</b>`:''}</div>
       <span class="bf-q">${qty}× label${qty===1?'':'s'}</span>
-      ${has?`<a class="btn sm" href="${esc(fnPdfUrl(it.sku))}" target="_blank" rel="noopener">Open FNSKU sheet ↗</a><button class="btn ghost sm" onclick="printLabelSku(${ab.box_no},'${sk}','fnsku')">Queue ${qty} → printer</button>`:`<span class="bf-none">no FNSKU (not on Amazon)</span>`}</div>`; }).join('');
+      ${has?`<a class="btn sm" href="${esc(fnPdfUrl(it.sku))}" target="_blank" rel="noopener">Open 30-Up sheet ↗</a><button class="btn ghost sm" onclick="printLabelSku(${ab.box_no},'${sk}','fnsku')">🏷 Print ${qty} → Zebra</button>`:`<span class="bf-none">no FNSKU (not on Amazon)</span>`}</div>`; }).join('');
   return `<div class="boxfnsku"><div class="bf-h">🏷 FNSKU labels for Box ${ab.box_no} — ${ab.items.length} item${ab.items.length===1?'':'s'} <span>each item has its own FNSKU · print the right count per item</span></div>${rows}</div>`; }
 // Visual "what's in this box" gallery — each item as a big thumbnail with its own print buttons underneath
 function boxContentsHtml(ab){ if(!ab||!ab.items.length) return '';
@@ -6043,15 +6043,15 @@ function boxContentsHtml(ab){ if(!ab||!ab.items.length) return '';
       <div class="bc-btns">
         <button class="btn sm bc-print" onclick="queueFiery('${sk}','','${ab.size}',${qty})">🖨 Print ${qty}× ${isBundle?(isBinder?'binder':'bundle'):(isBinder?'binder':'poster')} → Fiery</button>
         ${labels?(hasFn
-          ? `<button class="btn ghost sm" onclick="printLabelSku(${ab.box_no},'${sk}','fnsku')">🏷 Queue ${qty} ${isBundle?'bundle ':''}FNSKU label${qty===1?'':'s'}</button><a class="bc-open" href="${esc(fnPdfUrl(it.sku))}" target="_blank" rel="noopener">Open FNSKU sheet ↗</a>`
+          ? `<button class="btn ghost sm" onclick="printLabelSku(${ab.box_no},'${sk}','fnsku')">🏷 Print ${qty} ${isBundle?'bundle ':''}FNSKU label${qty===1?'':'s'} → Zebra</button><a class="bc-open" href="${esc(fnPdfUrl(it.sku))}" target="_blank" rel="noopener">Open 30-Up sheet ↗</a>`
           : `<span class="bf-none">no FNSKU (not on Amazon)</span>`):''}
       </div>
     </div>`; }).join('');
   return `<div class="boxcontents"><div class="bc-h">📦 What's in Box ${ab.box_no} — ${ab.items.length} item${ab.items.length===1?'':'s'} <span>the exact items to pack · print each one right underneath its picture</span></div><div class="bc-grid">${cards}</div></div>`; }
 function printLabelSku(n,sku,type){ const b=STATE.boxes.find(x=>x.box_no===n); if(!b)return; const ix=b.items.findIndex(i=>i.sku===sku); if(ix>=0)printLabel(n,ix,type); }
 function printLabel(n,ix,type){ const b=STATE.boxes.find(x=>x.box_no===n); if(b){const it=b.items[ix];it.label=type;sbItem(it,{label_status:type});
-  SB.from('print_jobs').insert({batch_id:CURRENT_BATCH?CURRENT_BATCH.id:null,product_sku:it.sku,file_path:(type==='fnsku'?fnPdfUrl(it.sku):printPdfUrl(it.sku)),size:b.size,copies:it.actual||it.qty,type:type,status:'queued'}).then(()=>{});
-  toast(type.toUpperCase()+' label queued for '+it.sku+' ('+(it.actual||it.qty)+'×)');render();} }
+  SB.from('print_jobs').insert({batch_id:CURRENT_BATCH?CURRENT_BATCH.id:null,product_sku:it.sku,file_path:(type==='fnsku'?fnSingleUrl(it.sku,'zpl'):printPdfUrl(it.sku)),size:(type==='fnsku'?'zebra':b.size),copies:it.actual||it.qty,type:type,status:'queued'}).then(()=>{});
+  toast(type==='fnsku'?('Sent '+(it.actual||it.qty)+'× FNSKU label → Zebra · '+it.sku):(type.toUpperCase()+' label queued for '+it.sku+' ('+(it.actual||it.qty)+'×)'));render();} }
 
 // ================= LIVE data layer =================
 function updateShipChip(){ const el=document.getElementById('shipChip'); if(el) el.textContent='📦 '+SHIPMENT.no; }
