@@ -667,9 +667,10 @@ tr.pq-selrow{background:rgba(78,207,154,.08)}
 <div id="zebramodal" class="pmodal" onclick="if(event.target.id==='zebramodal')closeZebra()">
   <div class="pm-card mini-card">
     <div class="mini-h">🏷 Print single FNSKU label → Zebra</div>
-    <div class="mini-sub"><b id="zebraTitle"></b> · FNSKU <span id="zebraCode"></span></div>
+    <div class="mini-sub"><b id="zebraTitle"></b> <span id="zebraCodeWrap">· FNSKU <span id="zebraCode"></span></span></div>
     <form onsubmit="confirmZebra(event)">
-      <label class="mini-field">How many labels?<input id="zebraCopies" type="number" min="1" max="500" value="1"></label>
+      <label class="mini-field"><span id="zebraAsk">How many labels?</span><input id="zebraCopies" type="number" min="1" max="500" value="1"></label>
+      <div class="mini-note" id="zebraBulkNote" style="display:none"></div>
       <div class="mini-note">Prints 2.25 × 1.25 in single labels on the <b>Zebra ZD620</b>. The Zebra agent must be running on the print PC.</div>
       <div class="mini-actions"><button type="button" class="btn ghost sm" onclick="closeZebra()">Cancel</button><button type="submit" class="btn sm">Print → Zebra</button></div>
     </form>
@@ -5377,7 +5378,7 @@ function viewRegister(){
   const R=STATE.register;
   const allShorts=R.flatMap(r=>r.shorts.map(s=>({...s,box:r.box_no})));
   const rows=R.map(r=>{
-    const cont=r.contents.map(c=>`${c.qty}${c.qty<c.requested?`<span class="short">/${c.requested}</span>`:''}× ${c.asin?esc(c.asin):esc(c.sku)}`).join('<br>');
+    const cont=r.contents.map(c=>`${c.qty}${c.qty<c.requested?`<span class="short">/${c.requested}</span>`:''}× <code>${esc(c.sku)}</code>${c.asin?' · '+esc(c.asin):''}`).join('<br>');
     const labs=[...new Set(r.contents.map(c=>c.label).filter(l=>l&&l!=='none'))].map(l=>l.toUpperCase()).join(', ')||'—';
     const st=r.status==='shipped'?`<span class="stat ship">SHIPPED</span>`:`<span class="stat pack">packed</span>`;
     const act=r.status==='shipped'?`<span style="color:#8397ab;font-size:11px">${r.shipped_at}</span>`:`<button class="btn sm" onclick="shipBox(${r.box_no})">Mark shipped</button>`;
@@ -5386,9 +5387,9 @@ function viewRegister(){
   const shortBanner=allShorts.length?`<div class="shortbar"><b>⚠ Shortages (${allShorts.reduce((s,x)=>s+x.short,0)} pcs):</b> ${allShorts.map(s=>`Box ${s.box} · ${esc(s.asin||s.sku)} short ${s.short}`).join(' · ')} — flagged for refill/backorder.</div>`:'';
   return `<h1>Box Register &amp; Shipment Log</h1><p class="sub">Every box you finish logs a row here and pushes to your <b>Google Sheet</b> — box #, carton, weight, units, and ASIN contents. Marking it <b>shipped</b> keeps the record permanently in your history and the Sheet.</p>
   <div class="shipbanner"><div><span class="shiplabel">SHIPMENT</span> <b>${SHIPMENT.no}</b></div><div class="shipmeta">${esc(SHIPMENT.name)} · ${R.length} boxes registered · ${R.filter(r=>r.status==='shipped').length} shipped</div></div>
-  <div class="bar"><span class="gsheet">▦ Synced to Google Sheet</span>${R.length?`<button class="btn ghost sm" onclick="shipAll()">Mark all shipped</button>`:''}<button class="btn ghost sm" onclick="toast('Demo: opens the linked Google Sheet')">Open Sheet ↗</button></div>
+  <div class="bar"><span class="gsheet">${sheetHook()?'▦ Synced to Google Sheet':'▦ Google Sheet not connected'}</span>${R.length?`<button class="btn ghost sm" onclick="shipAll()">Mark all shipped</button>`:''}<button class="btn ghost sm" onclick="openSheet()">Open Sheet ↗</button>${R.length&&sheetHook()?`<button class="btn ghost sm" onclick="sheetResend()" title="Send every registered box of this shipment to the Sheet again">↻ Re-send to Sheet</button>`:''}</div>
   ${shortBanner}
-  ${R.length?`<table><thead><tr><th>Box</th><th>Order</th><th>Status</th><th>Carton</th><th>Size</th><th>Weight</th><th>Units</th><th>Contents (ASIN × qty)</th><th>Labels</th><th></th></tr></thead><tbody>${rows}</tbody></table>`:'<div class="note">No boxes registered yet. Go to the <b>Packer</b> tab, click through a box, and hit <b>Box done</b> — it lands here and on the Sheet.</div>'}`;
+  ${R.length?`<table><thead><tr><th>Box</th><th>Order</th><th>Status</th><th>Carton</th><th>Size</th><th>Weight</th><th>Units</th><th>Contents (qty × SKU · ASIN)</th><th>Labels</th><th></th></tr></thead><tbody>${rows}</tbody></table>`:'<div class="note">No boxes registered yet. Go to the <b>Packer</b> tab, click through a box, and hit <b>Box done</b> — it lands here and on the Sheet.</div>'}`;
 }
 
 function viewSettings(){
@@ -5572,6 +5573,7 @@ function viewWholesale(){
     <button class="jbtn jbtn-blue" onclick="exportPDF(wholeExportTarget())">PDF (<span data-exportcount>${selN||wholeItems().length}</span>)</button>
     <button class="jbtn jbtn-purple" onclick="exportJPEGof('wsheet','JBG_Wholesale_Sheet.jpg')">JPEG</button>
     <button class="jbtn jbtn-teal" onclick="openQuoteBuilder(wholeSelectedItems().map(p=>p.sku))">🧾 Quote${selN?' ('+selN+')':''}</button>
+    <button class="jbtn jbtn-orange" onclick="openZebraBulk(wholeSelectedItems().map(p=>p.sku))" title="Print single FNSKU labels for every checked row">🏷 FNSKU → Zebra${selN?' ('+selN+')':''}</button>
   </div>
   <div class="wsheet-wrap" id="wholeWrap">${wholeTable()}</div>
   <div id="wholePager">${wholePagerHTML()}</div>`;
@@ -5665,11 +5667,23 @@ function closeFiery(){ const m=document.getElementById('fierymodal'); if(m)m.cla
 function confirmFiery(e){ if(e)e.preventDefault(); const sku=STATE.fierySku; const p=byRaw.get(sku)||{}; const n=Math.max(1,parseInt(document.getElementById('fieryCopies').value,10)||1);
   const size=(p.size)||sizeOf(sku); queueFiery(sku,p.pdf||'',size,n); closeFiery(); }
 // ---- Print single FNSKU label -> Zebra (asks how many, then queues for the Zebra agent) ----
-function openZebraPrompt(sku,qty,ctx){ STATE.zebraSku=sku; STATE.zebraCtx=ctx||null; const m=document.getElementById('zebramodal'); if(!m)return; const p=byRaw.get(sku)||{};
+function openZebraPrompt(sku,qty,ctx){ STATE.zebraSku=sku; STATE.zebraCtx=ctx||null; STATE.zebraBulk=null; zebraModalMode(false); const m=document.getElementById('zebramodal'); if(!m)return; const p=byRaw.get(sku)||{};
   document.getElementById('zebraTitle').textContent=(p.title||sku); document.getElementById('zebraCode').textContent=(p.fnskuCode||'');
   const i=document.getElementById('zebraCopies'); i.value=qty||1; m.classList.add('on'); setTimeout(()=>{i.focus();i.select();},40); }
+// Bulk: several products at once (Wholesale tab). Each product's run starts with a "NEXT ITEM" separator label.
+function zebraModalMode(bulk){ document.getElementById('zebraCodeWrap').style.display=bulk?'none':''; document.getElementById('zebraAsk').textContent=bulk?'How many labels of EACH?':'How many labels?'; document.getElementById('zebraBulkNote').style.display=bulk?'':'none'; }
+function openZebraBulk(skus){ const ok=skus.filter(k=>(byRaw.get(k)||{}).fnskuCode), no=skus.length-ok.length;
+  if(!skus.length){ toast('Check the rows you want first'); return; } if(!ok.length){ toast('None of the checked products has an FNSKU yet'); return; }
+  STATE.zebraBulk=ok; STATE.zebraSku=null; STATE.zebraCtx=null; zebraModalMode(true);
+  document.getElementById('zebraTitle').textContent=ok.length+' product'+(ok.length===1?'':'s');
+  document.getElementById('zebraBulkNote').innerHTML='A <b>NEXT ITEM</b> separator label (poster name + picture) prints before each product, so the stacks are easy to split.'+(no?' <b>'+no+' checked product'+(no===1?' has':'s have')+' no FNSKU and will be skipped.</b>':'');
+  const i=document.getElementById('zebraCopies'); i.value=1; document.getElementById('zebramodal').classList.add('on'); setTimeout(()=>{i.focus();i.select();},40); }
 function closeZebra(){ const m=document.getElementById('zebramodal'); if(m)m.classList.remove('on'); }
 function confirmZebra(e){ if(e)e.preventDefault(); const sku=STATE.zebraSku; const n=Math.min(500,Math.max(1,parseInt(document.getElementById('zebraCopies').value,10)||1));
+  if(STATE.zebraBulk){ const list=STATE.zebraBulk, t0=Date.now();   // staggered created_at keeps the printer in the order shown on screen
+    const rows=list.map((k,i)=>({batch_id:null,product_sku:k,file_path:fnSingleUrl(k,'zpl'),size:'zebra-cover',copies:n,type:'fnsku',status:'queued',created_at:new Date(t0+i).toISOString()}));
+    SB.from('print_jobs').insert(rows).then(({error})=>{ toast(error?('Queue failed: '+error.message):('Sent '+n+'× FNSKU labels for '+list.length+' products → Zebra')); });
+    STATE.zebraBulk=null; closeZebra(); return; }
   SB.from('print_jobs').insert({batch_id:CURRENT_BATCH?CURRENT_BATCH.id:null,product_sku:sku,file_path:fnSingleUrl(sku,'zpl'),size:'zebra',copies:n,type:'fnsku',status:'queued'}).then(({error})=>{ toast(error?('Queue failed: '+error.message):('Sent '+n+'× FNSKU label → Zebra')); });
   const c=STATE.zebraCtx; if(c){ const b=STATE.boxes.find(x=>x.box_no===c.box); const it=b&&b.items[c.ix]; if(it&&it.sku===sku){ it.label='fnsku'; sbItem(it,{label_status:'fnsku'}); render(); } }   // Packer: mark the item's FNSKU label as printed
   closeZebra(); }
@@ -5858,6 +5872,14 @@ function removePlan(sku){ const i=PLAN_LIST.findIndex(r=>r.sku===sku); if(i>=0)P
 function clearPlan(){ if(PLAN_LIST.length&&!confirm('Clear the whole pack?'))return; PLAN_LIST=[]; render(); }
 function openPlanPicker(){ STATE.pickPlan=true; STATE.pickBox=null; STATE.pickList=false; STATE.pickQ=''; render(); setTimeout(()=>{const s=document.getElementById('pickSearch');if(s)s.focus();},30); }
 // ---- Slack pick notification (optional; set the webhook in Settings) ----
+// ---- Google Sheet (Apps Script web app): each shipment gets its own tab; one row per item, with SKU + ASIN ----
+function sheetHook(){ return SETTINGS.sheet_webhook||''; }
+function sheetPost(payload){ const u=sheetHook(); if(!u)return false; try{ fetch(u,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(payload)}); return true; }catch(e){ return false; } }
+function sheetBoxPayload(r){ return {action:'box',shipment:r.shipment||SHIPMENT.no,order:r.order||SHIPMENT.name,box_no:r.box_no,status:r.status,carton:r.carton,size:r.size,weight_lb:r.weight_lb,units:r.units,
+  items:r.contents.map(c=>{ const p=byRaw.get(c.sku)||{}; return {sku:c.sku,asin:c.asin||p.asin||'',fnsku:p.fnskuCode||'',title:p.title||'',qty:c.qty,requested:c.requested,label:(c.label&&c.label!=='none')?c.label:''}; })}; }
+function sheetPushBox(n){ const r=STATE.register.find(x=>x.box_no===n); if(r)sheetPost(sheetBoxPayload(r)); }
+function sheetResend(){ STATE.register.forEach(r=>sheetPost(sheetBoxPayload(r))); toast('Re-sent '+STATE.register.length+' box'+(STATE.register.length===1?'':'es')+' to the Google Sheet'); }
+function openSheet(){ const u=sheetHook(); if(!u){ toast('Google Sheet is not connected yet'); return; } window.open(u+'?open='+encodeURIComponent(SHIPMENT.no||''),'_blank'); }
 function slackWebhook(){ try{ return localStorage.getItem('jbg_slack_webhook')||''; }catch(e){ return ''; } }
 function saveSlackWebhook(v){ try{ localStorage.setItem('jbg_slack_webhook',(v||'').trim()); toast(v?'Slack webhook saved':'Slack webhook cleared'); }catch(e){ toast('Could not save on this device'); } }
 function slackNotify(text){ const url=slackWebhook(); if(!url)return false; try{ fetch(url,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})}); return true; }catch(e){ return false; } }
@@ -6024,10 +6046,11 @@ function packBox(n){ const b=STATE.boxes.find(x=>x.box_no===n); if(!b)return;
     contents:b.items.map(i=>({asin:i.asin||'',sku:i.sku,qty:i.actual,requested:i.qty,label:i.label})), shorts });
   STATE.register.sort((a,b)=>a.box_no-b.box_no);
   toast('Box '+n+' registered → Google Sheet ('+packedUnits+' units, '+(packedOz/16).toFixed(1)+' lb'+(shorts.length?', '+shorts.reduce((s,x)=>s+x.short,0)+' short':'')+')');
+  sheetPushBox(n);
   STATE.activeBox=null; STATE.packStep=0; render();
 }
-function shipBox(n){ const r=STATE.register.find(x=>x.box_no===n); const b=STATE.boxes.find(x=>x.box_no===n); if(r){r.status='shipped';r.shipped_at='just now';} if(b){b.status='shipped';sbBox(b,{status:'shipped',shipped_at:new Date().toISOString()});} toast('Box '+n+' marked SHIPPED — kept in history + Google Sheet'); render(); }
-function shipAll(){ STATE.register.forEach(r=>{if(r.status!=='shipped'){r.status='shipped';r.shipped_at='just now';}}); STATE.boxes.forEach(b=>{if(b.status==='packed'){b.status='shipped';sbBox(b,{status:'shipped',shipped_at:new Date().toISOString()});}}); toast('All packed boxes marked SHIPPED'); render(); }
+function shipBox(n){ const r=STATE.register.find(x=>x.box_no===n); const b=STATE.boxes.find(x=>x.box_no===n); if(r){r.status='shipped';r.shipped_at='just now';} if(b){b.status='shipped';sbBox(b,{status:'shipped',shipped_at:new Date().toISOString()});} sheetPushBox(n); toast('Box '+n+' marked SHIPPED — kept in history + Google Sheet'); render(); }
+function shipAll(){ STATE.register.forEach(r=>{if(r.status!=='shipped'){r.status='shipped';r.shipped_at='just now';}}); STATE.boxes.forEach(b=>{if(b.status==='packed'){b.status='shipped';sbBox(b,{status:'shipped',shipped_at:new Date().toISOString()});}}); STATE.register.forEach(r=>sheetPost(sheetBoxPayload(r))); toast('All packed boxes marked SHIPPED'); render(); }
 // Per-box FNSKU panel: every item in the box + its FNSKU sheet + quantity, all in one place
 function boxFnskuHtml(ab){ if(!curLabels()||!ab||!ab.items.length) return '';
   const rows=ab.items.map(it=>{ const p=byRaw.get(it.sku)||{}; const code=p.fnskuCode||''; const has=!!(it.fnsku||p.fnsku||code); const qty=it.actual||it.qty; const sk=esc(it.sku).replace(/'/g,"\\'"); const isBundle=((p.sheets_db)||sheetsOf(it.sku))>1;
@@ -6179,7 +6202,7 @@ async function boot(){
     buildIndexes();
     LINES=[...new Set(PRODUCTS.map(p=>p.line))]; STATE.catLine=LINES[0]||'';
     const {data:st}=await SB.from('settings').select('*').eq('id',1).single();
-    if(st){SETTINGS.box_cap_oz=+st.box_cap_oz;if(st.box_stack_in)SETTINGS.box_stack_in=+st.box_stack_in;if(st.weights)SETTINGS.weights=st.weights;}
+    if(st){SETTINGS.box_cap_oz=+st.box_cap_oz;if(st.box_stack_in)SETTINGS.box_stack_in=+st.box_stack_in;if(st.weights)SETTINGS.weights=st.weights; SETTINGS.sheet_webhook=st.sheet_webhook||'';}
     const {data:al}=await SB.from('sku_aliases').select('*');
     (al||[]).forEach(a=>{if(a.product_sku)ALIASES[a.list_sku]=a.product_sku;});
     await loadLatestBatch();
