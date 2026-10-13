@@ -85,6 +85,7 @@ select,input[type=file],input[type=text],input:not([type]){font-size:13px;paddin
 .subnav{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:14px}
 .subnav button{background:#fff;border:1.5px solid #dbe6df;color:#3a5068;font-size:12.5px;padding:6px 12px;border-radius:20px;cursor:pointer;font-weight:600}
 .subnav button.on{background:var(--mint-d);color:#fff;border-color:var(--mint-d)}
+.sizenav{margin-top:-6px}.sizenav button{border-radius:8px;font-size:13px;padding:7px 14px}.sizenav button span{opacity:.65;font-weight:500;margin-left:4px}
 .cat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px}
 .cat-card{background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 10px rgba(20,40,60,.06);cursor:pointer;transition:transform .08s}
 .cat-card:hover{transform:translateY(-2px)}
@@ -5070,8 +5071,11 @@ function viewCatalog(){
   const subtabs=LINES.map(l=>`<button class="${STATE.catLine===l?'on':''}" onclick="catTab('${l}')">${LINE_LABEL[l]||l}</button>`).join('');
   const q=(STATE.catQ||'').toLowerCase();
   const searching=!!q;
-  let items=searching?PRODUCTS.filter(p=>((p.sku||'')+' '+(p.title||'')+' '+(p.asin||'')+' '+(p.fnskuCode||'')).toLowerCase().includes(q)):PRODUCTS.filter(p=>p.line===STATE.catLine);
+  let items=searching?PRODUCTS.filter(p=>((p.sku||'')+' '+(p.title||'')+' '+(p.asin||'')+' '+(p.fnskuCode||'')).toLowerCase().includes(q)):catLineItems();
   items=items.slice().sort(catOrderProd);   // number order · bundles at the end
+  // size sub-tabs: any line that has both 11x17 and 8.5x11 gets one tab per size
+  const szs=searching?[]:catSizes(STATE.catLine), curSz=catSizeNow();
+  const sizetabs=szs.length>1?`<div class="subnav sizenav">${szs.map(z=>`<button class="${curSz===z?'on':''}" onclick="catSizeTab('${z}')">${z.replace('x',' × ')} <span>${PRODUCTS.filter(p=>p.line===STATE.catLine&&sizeOfProd(p)===z).length}</span></button>`).join('')}</div>`:'';
   const ex=STATE.exportMode;
   const card=p=>{ const sk=esc(p.sku).replace(/'/g,"\\'"); const sel=!!STATE.exportSel[p.sku];
     const onclick=ex?`toggleExportSel('${sk}')`:`openProduct('${sk}')`;
@@ -5104,6 +5108,7 @@ function viewCatalog(){
         <button class="btn sm gold" onclick="toggleExportMode()">⬇ Export catalog</button></div>`;
   return `<h1>Catalog</h1><p class="sub">Your live catalog — browse any line and <b>manually print</b> any product (set copies → send to Fiery). This is your dashboard, made live; the automatic list flow is the other tabs.</p>
   <div class="subnav">${subtabs}</div>
+  ${sizetabs}
   ${exportBar}
   ${body}`;
 }
@@ -5411,9 +5416,13 @@ function viewSettings(){
 }
 
 /* ---------- catalog + manual print ---------- */
-function catTab(l){STATE.catLine=l;STATE.catQ='';render();}
+function catTab(l){STATE.catLine=l;STATE.catQ='';STATE.catSize='';render();}
+function catSizeTab(z){STATE.catSize=z;render();}
+function catSizes(line){ const o=['11x17','8.5x11']; return [...new Set(PRODUCTS.filter(p=>p.line===line).map(sizeOfProd))].sort((a,b)=>((o.indexOf(a)+1)||9)-((o.indexOf(b)+1)||9)); }
+function catSizeNow(){ const z=catSizes(STATE.catLine); return z.length>1?(z.includes(STATE.catSize)?STATE.catSize:z[0]):''; }
+function catLineItems(){ const z=catSizeNow(); return PRODUCTS.filter(p=>p.line===STATE.catLine&&(!z||sizeOfProd(p)===z)); }
 function catSearch(v){STATE.catQ=v; if(STATE.exportMode){render();return;} const g=document.querySelector('.cat-grid');if(!g)return;
-  const q=v.toLowerCase();let items=q?PRODUCTS.filter(p=>((p.sku||'')+' '+(p.title||'')+' '+(p.asin||'')+' '+(p.fnskuCode||'')).toLowerCase().includes(q)):PRODUCTS.filter(p=>p.line===STATE.catLine);
+  const q=v.toLowerCase();let items=q?PRODUCTS.filter(p=>((p.sku||'')+' '+(p.title||'')+' '+(p.asin||'')+' '+(p.fnskuCode||'')).toLowerCase().includes(q)):catLineItems();
   items=items.slice().sort(catOrderProd);
   g.innerHTML=items.map(p=>`<div class="cat-card" onclick="openProduct('${esc(p.sku).replace(/'/g,"\\'")}')"><div class="im">${imgFor(p.sku,p.thumb)?`<img src="${esc(imgFor(p.sku,p.thumb))}" onerror="this.parentNode.textContent='${initials(p.sku)}'">`:initials(p.sku)}</div><div class="bd"><div class="ct">${esc(p.title||p.sku).slice(0,52)}</div><div class="cs"><code>${esc(p.sku)}</code></div>${catBadges(p)}</div></div>`).join('')||'<div class="note">No matches.</div>';
 }
@@ -5422,7 +5431,7 @@ function toggleExportMode(){ STATE.exportMode=!STATE.exportMode; render(); }
 function toggleExportSel(sku){ if(STATE.exportSel[sku])delete STATE.exportSel[sku]; else STATE.exportSel[sku]=true; render(); }
 function exportClear(){ STATE.exportSel={}; render(); }
 function exportShownItems(){ const q=(STATE.catQ||'').toLowerCase();
-  let items=q?PRODUCTS.filter(p=>(p.sku+' '+p.title).toLowerCase().includes(q)):PRODUCTS.filter(p=>p.line===STATE.catLine);
+  let items=q?PRODUCTS.filter(p=>(p.sku+' '+p.title).toLowerCase().includes(q)):catLineItems();
   return items.slice().sort(catOrderProd); }
 function exportSelectShown(){ exportShownItems().forEach(p=>{STATE.exportSel[p.sku]=true;}); render(); }
 function selectedProducts(){ return Object.keys(STATE.exportSel).map(sku=>byRaw.get(sku)||PRODUCTS.find(p=>p.sku===sku)).filter(Boolean).sort(catOrderProd); }
