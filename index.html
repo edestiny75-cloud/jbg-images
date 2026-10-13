@@ -663,6 +663,17 @@ tr.pq-selrow{background:rgba(78,207,154,.08)}
     </form>
   </div>
 </div>
+<div id="zebramodal" class="pmodal" onclick="if(event.target.id==='zebramodal')closeZebra()">
+  <div class="pm-card mini-card">
+    <div class="mini-h">🏷 Print single FNSKU label → Zebra</div>
+    <div class="mini-sub"><b id="zebraTitle"></b> · FNSKU <span id="zebraCode"></span></div>
+    <form onsubmit="confirmZebra(event)">
+      <label class="mini-field">How many labels?<input id="zebraCopies" type="number" min="1" max="500" value="1"></label>
+      <div class="mini-note">Prints 2.25 × 1.25 in single labels on the <b>Zebra ZD620</b>. The Zebra agent must be running on the print PC.</div>
+      <div class="mini-actions"><button type="button" class="btn ghost sm" onclick="closeZebra()">Cancel</button><button type="submit" class="btn sm">Print → Zebra</button></div>
+    </form>
+  </div>
+</div>
 <div id="quotemodal" class="pmodal" onclick="if(event.target.id==='quotemodal')closeQuote()">
   <div class="pm-card mini-card" style="max-width:660px;width:94vw">
     <div class="pm-head"><b style="font-size:18px">🧾 Create wholesale quote</b><button class="pm-x" onclick="closeQuote()" title="Close">×</button></div>
@@ -5034,6 +5045,7 @@ const GCS_PRINTS='https://storage.googleapis.com/jbg-print-files-2026/';        
 function printPdfUrl(sku){ return GCS_PRINTS+encodeURIComponent(sku)+'.pdf'; }      // real Fiery print PDF — same file as the Catalog Dashboard
 function printPdf12x18Url(sku){ return GCS_PRINTS+encodeURIComponent(sku)+'_12x18.pdf'; } // separate 12x18 cut-file PDF (only some SKUs)
 function fnPdfUrl(sku){ return PRINTS_PUB+encodeURIComponent(sku)+'_FN.pdf'; }       // real FNSKU 30-up PDF (Supabase)
+function fnSingleUrl(sku,ext){ return GCS_PRINTS+'fnsku-single/'+encodeURIComponent(sku)+'.'+(ext||'pdf'); }   // single 2.25x1.25 FNSKU label (pdf to view, zpl for the Zebra)
 function assetUrl(sku,field){ if(field==='pngB')return sideBUrl(sku); if(field==='fnsku')return fnUrl(sku); if(field==='pdf12x18')return printPdf12x18Url(sku); if(field==='pdf')return printPdfUrl(sku); return imgFor(sku); }
 /* Print poster PDFs are hosted on Google Cloud Storage (jbg-print-files-2026) — the "Open Print PDF" button opens the exact production file in the browser, same as the Catalog Dashboard. FNSKU label PDFs stay on Supabase (fnPdfUrl). */
 function thumbEl(t,sku){ const s=imgFor(sku,t); if(s) return `<span class="thumb"><img src="${esc(s)}" style="width:100%;height:100%;object-fit:cover" onerror="this.parentNode.textContent='${initials(sku)}'"></span>`; return `<span class="thumb">${initials(sku)}</span>`;}
@@ -5574,7 +5586,8 @@ function detailBody(sku,opts){
     <div><div class="dfnsku-code">FNSKU: ${esc(b.fnskuCode||'—')}</div>
     <div class="dfnsku-note">Print the full 30-up sheet to your <b>label printer</b> with the gold button below. The Print File goes to your <b>Fiery</b> separately — two different printers.</div></div></div></div>`:'';
   const actions=(cfg.actions||[]).filter(a=>!(a.field==='pdf12x18' && !p.pdf12x18)).map(a=>`<a class="btn ${a.primary?'primary':'ghost'} sm" href="${esc(assetUrl(sku,a.field))}" target="_blank" rel="noopener">${esc(a.label)}</a>`).join('');
-  const fnskuBtn=hasFn?`<a class="btn gold sm" href="${esc(fnPdfUrl(sku))}" target="_blank" rel="noopener">Open FNSKU Sheet → Label Printer</a>`:'';
+  const fnskuBtn=hasFn?`<a class="btn gold sm" href="${esc(fnPdfUrl(sku))}" target="_blank" rel="noopener">Open 30-Up FNSKU Sheet</a>`:'';
+  const zebraBtn=p.fnskuCode?`<a class="btn ghost sm" href="${esc(fnSingleUrl(sku,'pdf'))}" target="_blank" rel="noopener">Open Single FNSKU Label</a><button class="btn gold sm" onclick="openZebraPrompt('${esc(sku).replace(/'/g,"\\'")}')">🏷 Print single → Zebra</button>`:'';
   const sh=sheetsOf(sku);
   const isBinder=isBinderSku(sku);
   const pieceWord=isBinder?'sheet':'poster';
@@ -5602,7 +5615,7 @@ function detailBody(sku,opts){
     ${shipStats}
     <div class="dpanels">${panels}</div>
     ${fnskuBlock}
-    ${opts.hidePrint?'':`<div class="dactions">${actions}${fnskuBtn}${p.pdf?`<button class="btn sm" onclick="openFieryPrompt('${esc(sku).replace(/'/g,"\\'")}')">🖨 Send → Fiery</button>`:''}</div>
+    ${opts.hidePrint?'':`<div class="dactions">${actions}${fnskuBtn}${zebraBtn}${p.pdf?`<button class="btn sm" onclick="openFieryPrompt('${esc(sku).replace(/'/g,"\\'")}')">🖨 Send → Fiery</button>`:''}</div>
     ${cfg.steps?`<div class="dsteps"><b>Fiery steps:</b> ${cfg.steps.replace(/^<b>[^<]*<\/b>\s*/,'')}</div>`:''}`}`;
 }
 function openProduct(sku){STATE.prod=byRaw.get(sku)||PRODUCTS.find(p=>p.sku===sku);renderModal();}
@@ -5641,6 +5654,14 @@ function openFieryPrompt(sku){ STATE.fierySku=sku; const m=document.getElementBy
 function closeFiery(){ const m=document.getElementById('fierymodal'); if(m)m.classList.remove('on'); }
 function confirmFiery(e){ if(e)e.preventDefault(); const sku=STATE.fierySku; const p=byRaw.get(sku)||{}; const n=Math.max(1,parseInt(document.getElementById('fieryCopies').value,10)||1);
   const size=(p.size)||sizeOf(sku); queueFiery(sku,p.pdf||'',size,n); closeFiery(); }
+// ---- Print single FNSKU label -> Zebra (asks how many, then queues for the Zebra agent) ----
+function openZebraPrompt(sku){ STATE.zebraSku=sku; const m=document.getElementById('zebramodal'); if(!m)return; const p=byRaw.get(sku)||{};
+  document.getElementById('zebraTitle').textContent=(p.title||sku); document.getElementById('zebraCode').textContent=(p.fnskuCode||'');
+  const i=document.getElementById('zebraCopies'); i.value=1; m.classList.add('on'); setTimeout(()=>{i.focus();i.select();},40); }
+function closeZebra(){ const m=document.getElementById('zebramodal'); if(m)m.classList.remove('on'); }
+function confirmZebra(e){ if(e)e.preventDefault(); const sku=STATE.zebraSku; const n=Math.min(500,Math.max(1,parseInt(document.getElementById('zebraCopies').value,10)||1));
+  SB.from('print_jobs').insert({batch_id:CURRENT_BATCH?CURRENT_BATCH.id:null,product_sku:sku,file_path:fnSingleUrl(sku,'zpl'),size:'zebra',copies:n,type:'fnsku',status:'queued'}).then(({error})=>{ toast(error?('Queue failed: '+error.message):('Sent '+n+'× FNSKU label → Zebra')); });
+  closeZebra(); }
 // ---- Create quote (single product → downloadable/printable form + logs to the product) ----
 // ---- Multi-product quote builder (cart) ----
 let QUOTE_CART=[];
@@ -6204,7 +6225,7 @@ function render(){ const v=
   if(STATE.view!=='jobs') stopJobsAuto();
   document.body.classList.toggle('wide', STATE.view==='wholesale');
   document.getElementById('app').innerHTML = v + viewPickerModal(); }
-document.addEventListener('keydown',function(e){ if(e.key==='Escape'){ const dm=document.getElementById('draftsmodal'); if(dm&&dm.classList.contains('on')){closeDrafts();return;} const fm=document.getElementById('fierymodal'); if(fm&&fm.classList.contains('on')){closeFiery();return;} const qm=document.getElementById('quotemodal'); if(qm&&qm.classList.contains('on')){closeQuote();return;} const xm=document.getElementById('exportmodal'); if(xm&&xm.classList.contains('on')){closeExportModal();return;} const om=document.getElementById('ordermodal'); if(om&&om.classList.contains('on')){closeOrderModal();return;} if(STATE.pickBox||STATE.pickList||STATE.pickPlan||STATE.pickQuote){closePicker();} else {closeProd();} } });
+document.addEventListener('keydown',function(e){ if(e.key==='Escape'){ const dm=document.getElementById('draftsmodal'); if(dm&&dm.classList.contains('on')){closeDrafts();return;} const fm=document.getElementById('fierymodal'); if(fm&&fm.classList.contains('on')){closeFiery();return;} const zm=document.getElementById('zebramodal'); if(zm&&zm.classList.contains('on')){closeZebra();return;} const qm=document.getElementById('quotemodal'); if(qm&&qm.classList.contains('on')){closeQuote();return;} const xm=document.getElementById('exportmodal'); if(xm&&xm.classList.contains('on')){closeExportModal();return;} const om=document.getElementById('ordermodal'); if(om&&om.classList.contains('on')){closeOrderModal();return;} if(STATE.pickBox||STATE.pickList||STATE.pickPlan||STATE.pickQuote){closePicker();} else {closeProd();} } });
 
 /* ===== Front gate: splash + theme song + login ===== */
 const SONG_URL='https://cdn1.suno.ai/23190aeb-0a04-45fd-b652-fcb2052cde3b.mp3';  // JBG theme song (streams from Suno)
