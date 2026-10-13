@@ -5655,12 +5655,13 @@ function closeFiery(){ const m=document.getElementById('fierymodal'); if(m)m.cla
 function confirmFiery(e){ if(e)e.preventDefault(); const sku=STATE.fierySku; const p=byRaw.get(sku)||{}; const n=Math.max(1,parseInt(document.getElementById('fieryCopies').value,10)||1);
   const size=(p.size)||sizeOf(sku); queueFiery(sku,p.pdf||'',size,n); closeFiery(); }
 // ---- Print single FNSKU label -> Zebra (asks how many, then queues for the Zebra agent) ----
-function openZebraPrompt(sku){ STATE.zebraSku=sku; const m=document.getElementById('zebramodal'); if(!m)return; const p=byRaw.get(sku)||{};
+function openZebraPrompt(sku,qty,ctx){ STATE.zebraSku=sku; STATE.zebraCtx=ctx||null; const m=document.getElementById('zebramodal'); if(!m)return; const p=byRaw.get(sku)||{};
   document.getElementById('zebraTitle').textContent=(p.title||sku); document.getElementById('zebraCode').textContent=(p.fnskuCode||'');
-  const i=document.getElementById('zebraCopies'); i.value=1; m.classList.add('on'); setTimeout(()=>{i.focus();i.select();},40); }
+  const i=document.getElementById('zebraCopies'); i.value=qty||1; m.classList.add('on'); setTimeout(()=>{i.focus();i.select();},40); }
 function closeZebra(){ const m=document.getElementById('zebramodal'); if(m)m.classList.remove('on'); }
 function confirmZebra(e){ if(e)e.preventDefault(); const sku=STATE.zebraSku; const n=Math.min(500,Math.max(1,parseInt(document.getElementById('zebraCopies').value,10)||1));
   SB.from('print_jobs').insert({batch_id:CURRENT_BATCH?CURRENT_BATCH.id:null,product_sku:sku,file_path:fnSingleUrl(sku,'zpl'),size:'zebra',copies:n,type:'fnsku',status:'queued'}).then(({error})=>{ toast(error?('Queue failed: '+error.message):('Sent '+n+'× FNSKU label → Zebra')); });
+  const c=STATE.zebraCtx; if(c){ const b=STATE.boxes.find(x=>x.box_no===c.box); const it=b&&b.items[c.ix]; if(it&&it.sku===sku){ it.label='fnsku'; sbItem(it,{label_status:'fnsku'}); render(); } }   // Packer: mark the item's FNSKU label as printed
   closeZebra(); }
 // ---- Create quote (single product → downloadable/printable form + logs to the product) ----
 // ---- Multi-product quote builder (cart) ----
@@ -6049,9 +6050,10 @@ function boxContentsHtml(ab){ if(!ab||!ab.items.length) return '';
     </div>`; }).join('');
   return `<div class="boxcontents"><div class="bc-h">📦 What's in Box ${ab.box_no} — ${ab.items.length} item${ab.items.length===1?'':'s'} <span>the exact items to pack · print each one right underneath its picture</span></div><div class="bc-grid">${cards}</div></div>`; }
 function printLabelSku(n,sku,type){ const b=STATE.boxes.find(x=>x.box_no===n); if(!b)return; const ix=b.items.findIndex(i=>i.sku===sku); if(ix>=0)printLabel(n,ix,type); }
-function printLabel(n,ix,type){ const b=STATE.boxes.find(x=>x.box_no===n); if(b){const it=b.items[ix];it.label=type;sbItem(it,{label_status:type});
-  SB.from('print_jobs').insert({batch_id:CURRENT_BATCH?CURRENT_BATCH.id:null,product_sku:it.sku,file_path:(type==='fnsku'?fnSingleUrl(it.sku,'zpl'):printPdfUrl(it.sku)),size:(type==='fnsku'?'zebra':b.size),copies:it.actual||it.qty,type:type,status:'queued'}).then(()=>{});
-  toast(type==='fnsku'?('Sent '+(it.actual||it.qty)+'× FNSKU label → Zebra · '+it.sku):(type.toUpperCase()+' label queued for '+it.sku+' ('+(it.actual||it.qty)+'×)'));render();} }
+function printLabel(n,ix,type){ const b=STATE.boxes.find(x=>x.box_no===n); if(b){const it=b.items[ix]; if(type==='fnsku'){ openZebraPrompt(it.sku,it.actual||it.qty,{box:n,ix:ix}); return; }
+  it.label=type;sbItem(it,{label_status:type});
+  SB.from('print_jobs').insert({batch_id:CURRENT_BATCH?CURRENT_BATCH.id:null,product_sku:it.sku,file_path:printPdfUrl(it.sku),size:b.size,copies:it.actual||it.qty,type:type,status:'queued'}).then(()=>{});
+  toast(type.toUpperCase()+' label queued for '+it.sku+' ('+(it.actual||it.qty)+'×)');render();} }
 
 // ================= LIVE data layer =================
 function updateShipChip(){ const el=document.getElementById('shipChip'); if(el) el.textContent='📦 '+SHIPMENT.no; }
