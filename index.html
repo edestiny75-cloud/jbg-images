@@ -3959,7 +3959,7 @@ const BYSKU = {
 "meta": "8.5\" × 11\" laminated · Faith Foundations",
 "line": "faith"
 },
-"JBG-BIN-LAM_FAITH": {
+"JBG-BIN-LAM-FAITH": {
 "pngA": "",
 "pngB": "",
 "jpeg": "Religous/GitHub Upload/JBG-BIN-LAM_FAITH-PACK.jpg",
@@ -4869,7 +4869,7 @@ const BYSKU = {
 "meta": "New release · 11\" × 17\" laminated",
 "line": "maps"
 },
-"JBG-POS-LAM-SAUDI": {
+"JBG-POS-LAM-SAUDI-ARABIA": {
 "pngA": "JBG_Maps_Fixed/PNG_Previews/SAUDI-1.png",
 "pngB": "JBG_Maps_Fixed/PNG_Previews/SAUDI-2.png",
 "jpeg": "",
@@ -5039,12 +5039,13 @@ function initials(sku){const t=(sku||'').replace(/^JB[GL]-(POS|BIN|CC)?-?(LAM-)?
 function imgFor(sku,t){ const p=byRaw.get(sku); return (p&&p.thumb_url)||THUMBS[sku]||t||''; }
 const SB_PUB=SB_URL+'/storage/v1/object/public/thumbs/';
 function sideBUrl(sku){ return SB_PUB+encodeURIComponent(sku)+'_B.jpg'; }   // Side B (uploaded)
-function fnUrl(sku){ return SB_PUB+encodeURIComponent(sku)+'_FN.jpg'; }     // FNSKU 30-up sheet (uploaded)
+const FN_FILE_ALIAS={'JBG-BIN-LAM-FAITH':'JBG-BIN-LAM_FAITH'};   // renamed to match Amazon 2026-10-13; the stored 30-up files keep the old name
+function fnUrl(sku){ return SB_PUB+encodeURIComponent(FN_FILE_ALIAS[sku]||sku)+'_FN.jpg'; }     // FNSKU 30-up sheet (uploaded)
 const PRINTS_PUB=SB_URL+'/storage/v1/object/public/prints/';
 const GCS_PRINTS='https://storage.googleapis.com/jbg-print-files-2026/';           // all 265 real print PDFs (Google Cloud)
 function printPdfUrl(sku){ return GCS_PRINTS+encodeURIComponent(sku)+'.pdf'; }      // real Fiery print PDF — same file as the Catalog Dashboard
 function printPdf12x18Url(sku){ return GCS_PRINTS+encodeURIComponent(sku)+'_12x18.pdf'; } // separate 12x18 cut-file PDF (only some SKUs)
-function fnPdfUrl(sku){ return PRINTS_PUB+encodeURIComponent(sku)+'_FN.pdf'; }       // real FNSKU 30-up PDF (Supabase)
+function fnPdfUrl(sku){ return PRINTS_PUB+encodeURIComponent(FN_FILE_ALIAS[sku]||sku)+'_FN.pdf'; }       // real FNSKU 30-up PDF (Supabase)
 function fnSingleUrl(sku,ext){ return GCS_PRINTS+'fnsku-single/'+encodeURIComponent(sku)+'.'+(ext||'pdf'); }   // single 2.25x1.25 FNSKU label (pdf to view, zpl for the Zebra)
 function assetUrl(sku,field){ if(field==='pngB')return sideBUrl(sku); if(field==='fnsku')return fnUrl(sku); if(field==='pdf12x18')return printPdf12x18Url(sku); if(field==='pdf')return printPdfUrl(sku); return imgFor(sku); }
 /* Print poster PDFs are hosted on Google Cloud Storage (jbg-print-files-2026) — the "Open Print PDF" button opens the exact production file in the browser, same as the Catalog Dashboard. FNSKU label PDFs stay on Supabase (fnPdfUrl). */
