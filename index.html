@@ -5389,7 +5389,7 @@ function viewRegister(){
   const shortBanner=allShorts.length?`<div class="shortbar"><b>⚠ Shortages (${allShorts.reduce((s,x)=>s+x.short,0)} pcs):</b> ${allShorts.map(s=>`Box ${s.box} · ${esc(s.asin||s.sku)} short ${s.short}`).join(' · ')} — flagged for refill/backorder.</div>`:'';
   return `<h1>Box Register &amp; Shipment Log</h1><p class="sub">Every box you finish logs a row here and pushes to your <b>Google Sheet</b> — box #, carton, weight, units, and ASIN contents. Marking it <b>shipped</b> keeps the record permanently in your history and the Sheet.</p>
   <div class="shipbanner"><div><span class="shiplabel">SHIPMENT</span> <b>${SHIPMENT.no}</b></div><div class="shipmeta">${esc(SHIPMENT.name)} · ${R.length} boxes registered · ${R.filter(r=>r.status==='shipped').length} shipped</div></div>
-  <div class="bar"><span class="gsheet">${sheetHook()?'▦ Synced to Google Sheet':'▦ Google Sheet not connected'}</span>${R.length?`<button class="btn ghost sm" onclick="shipAll()">Mark all shipped</button>`:''}<button class="btn ghost sm" onclick="openSheet()">Open Sheet ↗</button>${R.length&&sheetHook()?`<button class="btn ghost sm" onclick="sheetResend()" title="Send every registered box of this shipment to the Sheet again">↻ Re-send to Sheet</button>`:''}</div>
+  <div class="bar"><span class="gsheet">${sheetHook()?'▦ Synced to Google Sheet':'▦ Google Sheet not connected'}</span>${R.length?`<button class="btn ghost sm" onclick="shipAll()">Mark all shipped</button>`:''}<button class="btn sm" onclick="exportRegisterExcel()">⬇ Export to Excel</button><button class="btn ghost sm" onclick="openSheet()">Open Sheet ↗</button>${R.length&&sheetHook()?`<button class="btn ghost sm" onclick="sheetResend()" title="Send every registered box of this shipment to the Sheet again">↻ Re-send to Sheet</button>`:''}</div>
   ${shortBanner}
   ${R.length?`<table><thead><tr><th>Box</th><th>Order</th><th>Status</th><th>Carton</th><th>Size</th><th>Weight</th><th>Units</th><th>Contents (qty × SKU · ASIN)</th><th>Labels</th><th></th></tr></thead><tbody>${rows}</tbody></table>`:'<div class="note">No boxes registered yet. Go to the <b>Packer</b> tab, click through a box, and hit <b>Box done</b> — it lands here and on the Sheet.</div>'}`;
 }
@@ -5886,6 +5886,17 @@ function clearPlan(){ if(PLAN_LIST.length&&!confirm('Clear the whole pack?'))ret
 function openPlanPicker(){ STATE.pickPlan=true; STATE.pickBox=null; STATE.pickList=false; STATE.pickQ=''; render(); setTimeout(()=>{const s=document.getElementById('pickSearch');if(s)s.focus();},30); }
 // ---- Slack pick notification (optional; set the webhook in Settings) ----
 // ---- Google Sheet (Apps Script web app): each shipment gets its own tab; one row per item, with SKU + ASIN ----
+// Box Register -> Excel (one row per item, with SKU + ASIN + FNSKU) - works without the Google Sheet
+function exportRegisterExcel(){ const R=STATE.register||[]; if(!R.length){ toast('No boxes registered yet'); return; }
+  const header=['Shipment','Order','Box','Status','Carton','Size','Box weight (lb)','Box units','Qty','Requested','Short','SKU','ASIN','FNSKU','Item','Label'];
+  const rows=[]; R.slice().sort((a,b)=>a.box_no-b.box_no).forEach(r=>{ (r.contents.length?r.contents:[{}]).forEach(c=>{ const p=byRaw.get(c.sku)||{};
+    rows.push({'Shipment':r.shipment||SHIPMENT.no,'Order':r.order||SHIPMENT.name,'Box':r.box_no,'Status':r.status,'Carton':r.carton,'Size':r.size,
+      'Box weight (lb)':r.weight_lb,'Box units':r.units,'Qty':c.qty??'','Requested':c.requested??'','Short':(c.requested!=null&&c.qty!=null)?Math.max(0,c.requested-c.qty):'',
+      'SKU':c.sku||'','ASIN':c.asin||p.asin||'','FNSKU':p.fnskuCode||'','Item':p.title||'','Label':(c.label&&c.label!=='none')?String(c.label).toUpperCase():''}); }); });
+  const ws=XLSX.utils.json_to_sheet(rows,{header}); ws['!cols']=header.map(h=>({wch:Math.max(8,Math.min(48,h==='Item'?40:h.length+4))}));
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Box Register');
+  const tag=String(SHIPMENT.no||'shipment').replace(/[^A-Za-z0-9_-]+/g,'_'); XLSX.writeFile(wb,'JBG_Box_Register_'+tag+'_'+new Date().toISOString().slice(0,10)+'.xlsx');
+  toast('Exported '+R.length+' box'+(R.length===1?'':'es')+' ('+rows.length+' rows) to Excel'); }
 function sheetHook(){ return SETTINGS.sheet_webhook||''; }
 function sheetPost(payload){ const u=sheetHook(); if(!u)return false; try{ fetch(u,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(payload)}); return true; }catch(e){ return false; } }
 function sheetBoxPayload(r){ return {action:'box',shipment:r.shipment||SHIPMENT.no,order:r.order||SHIPMENT.name,box_no:r.box_no,status:r.status,carton:r.carton,size:r.size,weight_lb:r.weight_lb,units:r.units,
