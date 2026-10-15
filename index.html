@@ -5893,20 +5893,20 @@ function exportRegisterExcel(){ const R=(STATE.register||[]).slice().sort((a,b)=
   const line=c=>{ const p=byRaw.get(c.sku)||{}; return {qty:c.qty??0, req:c.requested??c.qty??0, sku:c.sku||'', asin:c.asin||p.asin||'', fnsku:p.fnskuCode||'', title:p.title||'', label:(c.label&&c.label!=='none')?String(c.label).toUpperCase():''}; };
   // ---- Sheet 1: Boxes ----
   const A=[['JBG Box Register'],['Shipment',ship,'','Order',order,'','Date',today],[],
-    ['Box','Status','Carton','Size','Weight (lb)','Units','Items','Short','Contents']];
+    ['Box','Status','Carton','Weight (lb)','Units','Items','Short','Contents']];
   let tW=0,tU=0,tS=0;
   R.forEach(r=>{ const L=r.contents.map(line); const short=L.reduce((s,x)=>s+Math.max(0,x.req-x.qty),0); tW+=+r.weight_lb||0; tU+=+r.units||0; tS+=short;
-    A.push(['Box '+r.box_no, r.status==='shipped'?'SHIPPED':'Packed', r.carton||'', r.size||'', +r.weight_lb||0, +r.units||0, L.length, short||'',
+    A.push(['Box '+r.box_no, r.status==='shipped'?'SHIPPED':'Packed', r.carton||'', +r.weight_lb||0, +r.units||0, L.length, short||'',
       L.map(x=>x.qty+'× '+(x.title||x.sku)).join(' · ')]); });
-  A.push([],['TOTAL','','','',+tW.toFixed(1),tU,'',tS||'', R.length+' box'+(R.length===1?'':'es')]);
-  const ws1=XLSX.utils.aoa_to_sheet(A); ws1['!cols']=[{wch:9},{wch:10},{wch:12},{wch:8},{wch:12},{wch:8},{wch:7},{wch:7},{wch:90}];
-  ws1['!merges']=[{s:{r:0,c:0},e:{r:0,c:8}}];
+  A.push([],['TOTAL','','',+tW.toFixed(1),tU,'',tS||'', R.length+' box'+(R.length===1?'':'es')]);
+  const ws1=XLSX.utils.aoa_to_sheet(A); ws1['!cols']=[{wch:9},{wch:10},{wch:12},{wch:12},{wch:8},{wch:7},{wch:7},{wch:90}];
+  ws1['!merges']=[{s:{r:0,c:0},e:{r:0,c:7}}];
   // ---- Sheet 2: Box Contents (grouped) ----
   const B=[['JBG Box Register — Box Contents'],['Shipment',ship,'Order',order,'Date',today],[]];
   const merges=[{s:{r:0,c:0},e:{r:0,c:7}}];
   R.forEach(r=>{ const L=r.contents.map(line);
     merges.push({s:{r:B.length,c:0},e:{r:B.length,c:7}});
-    B.push(['BOX '+r.box_no+'   ·   '+(r.carton||'')+'   ·   '+(r.size||'')+'   ·   '+(+r.weight_lb||0)+' lb   ·   '+(+r.units||0)+' units   ·   '+(r.status==='shipped'?'SHIPPED':'Packed')]);
+    B.push(['BOX '+r.box_no+'   ·   '+(r.carton||'')+'   ·   '+(+r.weight_lb||0)+' lb   ·   '+(+r.units||0)+' units   ·   '+(r.status==='shipped'?'SHIPPED':'Packed')]);
     B.push(['Qty','Item','SKU','ASIN','FNSKU','Requested','Short','Label']);
     L.forEach(x=>B.push([x.qty,x.title,x.sku,x.asin,x.fnsku,x.req,Math.max(0,x.req-x.qty)||'',x.label]));
     B.push([]); });
