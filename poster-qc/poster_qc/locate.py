@@ -6,12 +6,21 @@ from .models import BBox
 
 @dataclass
 class WordLocation:
-    word_box: BBox          # tight ink box of the word, full-image coords
+    word_box: BBox          # tight ink box of the word, full-image coords (AABB; may be diagonal text)
     erase_box: BBox         # box to erase: word box widened to half-gaps, full line band vertically
     line_box: BBox          # ink box of the whole line
     baseline: int           # full-image y
     ink_color: tuple[int, int, int]
     words: list[BBox]       # all word boxes on the line (full-image coords)
+    # Map-label skew: when the line is rotated, locate deskews a crop, finds upright boxes, then
+    # stores both the full-image AABB (for Claude read-back) and the upright boxes (for clone/inpaint).
+    skew_angle: float = 0.0
+    skew_region: BBox | None = None
+    upright_word_box: BBox | None = None
+    upright_erase_box: BBox | None = None
+    upright_line_box: BBox | None = None
+    upright_words: list[BBox] | None = None
+    upright_baseline: int | None = None
 
 def otsu(gray: np.ndarray) -> int:
     hist = np.bincount(gray.ravel(), minlength=256).astype(np.float64)
@@ -28,15 +37,141 @@ def otsu(gray: np.ndarray) -> int:
         if between > best: best, thresh = between, t
     return thresh
 
-POLARITY = "auto"    # "dark" (dark text on light), "light" (light text on dark), or "auto" (minority class)
+POLARITY = "auto"    # "dark" (dark text on light), "light" (light text on dark), or "auto" (text-likeness)
 
 def set_polarity(mode: str | None) -> None:
     global POLARITY
     POLARITY = mode if mode in ("dark", "light") else "auto"
 
+def _text_likeness(mask: np.ndarray) -> float:
+    """Score how much mask looks like lettering after stripping rules/borders/tall fills.
+    Prefers stroke-density line bands (ink fraction ~5-35% inside the band). A dark plaque with
+    letter-shaped holes scores high on raw glyph counts but fails the density check — that is the
+    framed-nameplate failure mode on parchment."""
+    if mask.size == 0 or not mask.any():
+        return -1.0
+    m = strip_edge_slivers(strip_tall_components(strip_rules(mask.copy())))
+    frac = float(m.mean())
+    if frac < 0.004 or frac > 0.42:
+        return -1.0
+    lines = text_lines(m)
+    if not lines:
+        return -1.0
+    score = 0.0
+    for y0, y1 in lines:
+        h = y1 - y0
+        if h < 5:
+            continue
+        band = m[y0:y1]
+        band_frac = float(band.mean())
+        cols = denoise_profile(band.sum(axis=0).astype(np.float64), frac=0.05).astype(np.int64)
+        glyphs = _drop_slivers(runs(cols, min_gap=0))
+        if len(glyphs) < 2:
+            continue
+        score += len(glyphs)
+        if 6 <= h <= 90:
+            score += 8.0
+        # stroke density: real ink is a minority inside the line band
+        if 0.04 <= band_frac <= 0.36:
+            score += 20.0
+        elif band_frac > 0.45:
+            score -= 30.0                      # fill / swiss-cheese plate, not strokes
+        span = glyphs[-1][1] - glyphs[0][0]
+        if span > 0.92 * m.shape[1] and len(glyphs) <= 3:
+            score -= 6.0
+    return score if score > 0 else -1.0
+
+def _plate_subcrop(img: Image.Image) -> Image.Image | None:
+    """If img is a dark ribbon/plaque on lighter parchment, return a crop of the plate; else None.
+    Detects a single solid dark blob (high fill ratio) that is a minority of the crop."""
+    import cv2
+    g = np.asarray(img.convert("L"), dtype=np.uint8)
+    t = otsu(g)
+    dark = g < t
+    if not (0.06 <= float(dark.mean()) <= 0.48):
+        return None
+    n, labels, stats, _ = cv2.connectedComponentsWithStats(dark.astype(np.uint8), connectivity=8)
+    if n <= 1:
+        return None
+    areas = stats[1:, cv2.CC_STAT_AREA]
+    i = 1 + int(np.argmax(areas))
+    area = int(stats[i, cv2.CC_STAT_AREA])
+    w, h = int(stats[i, cv2.CC_STAT_WIDTH]), int(stats[i, cv2.CC_STAT_HEIGHT])
+    if w * h <= 0 or area < 0.55 * int(dark.sum()):
+        return None
+    fill = area / float(w * h)
+    if fill < 0.55 or area < 0.08 * dark.size:
+        return None
+    x, y = int(stats[i, cv2.CC_STAT_LEFT]), int(stats[i, cv2.CC_STAT_TOP])
+    pad = 4
+    return img.crop((max(x - pad, 0), max(y - pad, 0),
+                     min(x + w + pad, img.width), min(y + h + pad, img.height)))
+
+def infer_polarity(img: Image.Image) -> str:
+    """Pick 'light' or 'dark' by which Otsu class looks more like text after cleanup.
+    Loose Claude boxes around framed nameplates are tightened to the dark plate first so parchment
+    margins do not make the plaque the 'minority ink' class."""
+    plate = _plate_subcrop(img)
+    target = plate if plate is not None and plate.size[0] * plate.size[1] < img.width * img.height * 0.95 else img
+    g = np.asarray(target.convert("L"), dtype=np.uint8)
+    t = otsu(g)
+    dark, light = g < t, g > t
+    sd, sl = _text_likeness(dark), _text_likeness(light)
+    if sl > sd:
+        return "light"
+    if sd > sl:
+        return "dark"
+    return "light" if light.mean() <= dark.mean() else "dark"
+
+def resolve_polarity(img: Image.Image, hinted: str | None = None) -> str:
+    """Polarity for a finding crop. Pixel inference wins over Claude's text_color hint — civics
+    nameplates are often labelled 'dark' (or left at the default) while the lettering is cream on a
+    ribbon, and a wrong polarity makes cell segmentation + paper-donor both fail.
+    The hinted argument is accepted for call-site clarity but inference always wins."""
+    return infer_polarity(img)
+
+def tighten_region(img: Image.Image, region: BBox, polarity: str) -> BBox:
+    """For light-on-dark lettering, shrink a loose Claude box to the dark plate so parchment margins
+    do not dominate Otsu / donor search. Dark-on-light regions are returned unchanged."""
+    if polarity != "light":
+        return region
+    rx0, ry0, rx1, ry1 = region
+    sub = img.crop(region)
+    if sub.width < 12 or sub.height < 12:
+        return region
+    g = np.asarray(sub.convert("L"), dtype=np.uint8)
+    t = otsu(g)
+    dark = g < t
+    # plate on parchment: dark is a minority fill (not the lettering)
+    if not (0.04 <= dark.mean() <= 0.55):
+        return region
+    import cv2
+    n, labels, stats, _ = cv2.connectedComponentsWithStats(dark.astype(np.uint8), connectivity=8)
+    if n <= 1:
+        return region
+    # largest dark blob = the ribbon / plaque cell
+    areas = stats[1:, cv2.CC_STAT_AREA]
+    i = 1 + int(np.argmax(areas))
+    x, y = int(stats[i, cv2.CC_STAT_LEFT]), int(stats[i, cv2.CC_STAT_TOP])
+    w, h = int(stats[i, cv2.CC_STAT_WIDTH]), int(stats[i, cv2.CC_STAT_HEIGHT])
+    if w * h < 0.05 * dark.size:
+        return region
+    pad = 4
+    return (
+        rx0 + max(x - pad, 0),
+        ry0 + max(y - pad, 0),
+        rx0 + min(x + w + pad, sub.width),
+        ry0 + min(y + h + pad, sub.height),
+    )
+
 def ink_mask(img: Image.Image) -> np.ndarray:
     """Text pixels of a crop. POLARITY 'dark' = darker-than-threshold is ink, 'light' = lighter is ink,
-    'auto' = whichever class is the minority (a crop is mostly background)."""
+    'auto' = whichever class is the minority (a crop is mostly background).
+
+    Framed nameplates need an explicit 'light' polarity (see infer_polarity / resolve_polarity): auto
+    minority-class is wrong when a dark plate sits on parchment (the plate is the minority). The
+    pipeline resolves polarity on the finding crop before locate/clone so glyph patches never rely
+    on auto heuristics."""
     g = np.asarray(img.convert("L"), dtype=np.uint8)
     t = otsu(g)
     if POLARITY == "dark":
@@ -236,8 +371,8 @@ def strip_tall_components(mask: np.ndarray, factor: float = 2.5) -> np.ndarray:
         return mask
     return mask & ~np.isin(labels, tall)
 
-def locate_candidates(img: Image.Image, region: BBox, line_text: str, word_index: int, max_n: int = 3) -> list[WordLocation]:
-    """Candidate word locations inside `region`, best first. Lines are ranked by (a) band height
+def _locate_candidates_axis(img: Image.Image, region: BBox, line_text: str, word_index: int, max_n: int = 3) -> list[WordLocation]:
+    """Axis-aligned candidate word locations inside `region`, best first. Lines are ranked by (a) band height
     plausibility, (b) natural word count vs the transcript, (c) relative word-width profile vs the
     transcript rendered in a serif font, (d) closeness to the region's vertical centre. Claude's line
     boxes are loose, so position alone is not enough; the pipeline confirms the winner by reading it."""
@@ -293,6 +428,213 @@ def locate_candidates(img: Image.Image, region: BBox, line_text: str, word_index
     if not out:
         raise ValueError("no usable text line in region")
     return out
+
+def _norm_angle_180(a: float) -> float:
+    """Map degrees into (-90, 90]."""
+    return ((a + 90.0) % 180.0) - 90.0
+
+
+def deskew_image(img: Image.Image, angle: float, fill: tuple[int, int, int] = (210, 190, 160)):
+    """Rotate `img` by `angle` degrees (CCW) with expand. Returns (rotated PIL, M, Minv) where M maps
+    original (x,y,1) -> rotated and Minv is the inverse affine (OpenCV 2x3)."""
+    import cv2
+    arr = np.asarray(img.convert("RGB"))
+    h, w = arr.shape[:2]
+    center = (w / 2.0, h / 2.0)
+    M = cv2.getRotationMatrix2D(center, angle, 1.0)
+    cos_a, sin_a = abs(M[0, 0]), abs(M[0, 1])
+    nw = int(h * sin_a + w * cos_a)
+    nh = int(h * cos_a + w * sin_a)
+    M[0, 2] += (nw / 2.0) - center[0]
+    M[1, 2] += (nh / 2.0) - center[1]
+    border = [int(c) for c in fill]
+    out = cv2.warpAffine(arr, M, (nw, nh), flags=cv2.INTER_CUBIC, borderValue=border)
+    Minv = cv2.invertAffineTransform(M)
+    return Image.fromarray(out), M, Minv
+
+
+def map_box_affine(box: BBox, M) -> BBox:
+    """Axis-aligned bounding box of `box`'s four corners after the 2x3 affine `M`."""
+    import math
+    pts = np.array([[box[0], box[1]], [box[2], box[1]], [box[2], box[3]], [box[0], box[3]]], dtype=np.float64)
+    ones = np.ones((4, 1), dtype=np.float64)
+    mapped = (M @ np.hstack([pts, ones]).T).T
+    xs, ys = mapped[:, 0], mapped[:, 1]
+    return (int(math.floor(xs.min())), int(math.floor(ys.min())),
+            int(math.ceil(xs.max())), int(math.ceil(ys.max())))
+
+
+def paper_fill_color(img: Image.Image) -> tuple[int, int, int]:
+    """Median non-ink colour for deskew borders (avoids black bars)."""
+    arr = np.asarray(img.convert("RGB"))
+    m = ink_mask(img)
+    px = arr[~m] if (~m).any() else arr.reshape(-1, 3)
+    return tuple(int(v) for v in np.median(px, axis=0))
+
+
+def estimate_pca_angle(img: Image.Image) -> float | None:
+    """Principal-axis angle (degrees) of the current-polarity ink mask, or None if too little ink."""
+    import math
+    m = ink_mask(img)
+    if float(m.mean()) < 0.004 or float(m.mean()) > 0.55:
+        return None
+    ys, xs = np.where(m)
+    if xs.size < 30:
+        return None
+    pts = np.column_stack([xs.astype(np.float64), ys.astype(np.float64)])
+    cov = np.cov((pts - pts.mean(axis=0)).T)
+    evals, evecs = np.linalg.eigh(cov)
+    if evals.max() < 1e-6:
+        return None
+    axis = evecs[:, int(np.argmax(evals))]
+    return float(math.degrees(math.atan2(axis[1], axis[0])))
+
+
+def _score_deskew_angle(rot: Image.Image, line_text: str) -> float:
+    """How well `rot` (already deskewed) shows a horizontal transcript-shaped ink band."""
+    from .fonts import load_font
+    m = strip_edge_slivers(strip_tall_components(strip_rules(ink_mask(rot))))
+    n_words = max(len(line_text.split()), 1)
+    best = -1e9
+    for y0, y1 in text_lines(m):
+        h = y1 - y0
+        if h < 10:
+            continue
+        nat = natural_word_count(m, y0, y1)
+        words = split_words(m, y0, y1, n_words)
+        if not words:
+            continue
+        span = words[-1][1] - words[0][0]
+        frac = float(m[y0:y1].mean())
+        aspect = span / max(h, 1)
+        fill = span / max(rot.width, 1)
+        expected = float(load_font("georgiab", max(int(h * 0.6), 10)).getlength(line_text))
+        width_ratio = span / max(expected, 1.0)
+        s = 0.0
+        s += max(0.0, 10.0 - abs(nat - n_words) * 5.0)
+        s += 28.0 * fill
+        if fill < 0.55:
+            s -= 25.0
+        s += 18.0 * max(0.0, 1.0 - abs(1.0 - width_ratio))
+        if aspect < 3.5:
+            s -= 12.0
+        if 0.05 <= frac <= 0.36:
+            s += 5.0
+        elif frac > 0.45:
+            s -= 8.0
+        if 14 <= h <= 70:
+            s += 4.0
+        if s > best:
+            best = s
+    return best
+
+
+def choose_deskew_angle(img: Image.Image, line_text: str) -> float | None:
+    """Pick a CCW rotation that makes map-label lettering horizontal, or None if nothing beats flat."""
+    pca = estimate_pca_angle(img)
+    if pca is None:
+        return None
+    seeds = [
+        _norm_angle_180(-pca),
+        _norm_angle_180(-pca + 90),
+        _norm_angle_180(-pca - 90),
+        _norm_angle_180(pca),
+        _norm_angle_180(pca + 90),
+    ]
+    fill = paper_fill_color(img)
+    ranked: list[tuple[float, float]] = []
+    seen: set[int] = set()
+    for seed in seeds:
+        for delta in range(-22, 23, 1):
+            a = int(round(_norm_angle_180(seed + delta)))
+            if a in seen or abs(a) < 12:
+                continue
+            seen.add(a)
+            rot, _, _ = deskew_image(img, float(a), fill=fill)
+            ranked.append((_score_deskew_angle(rot, line_text), float(a)))
+    if not ranked:
+        return None
+    ranked.sort(reverse=True)
+    best_score, best_angle = ranked[0]
+    flat = _score_deskew_angle(img, line_text)
+    if best_score < 40.0 or best_score < flat + 8.0:
+        return None
+    return best_angle
+
+
+def _offset_box(box: BBox, dx: int, dy: int) -> BBox:
+    return (box[0] + dx, box[1] + dy, box[2] + dx, box[3] + dy)
+
+
+def _locate_candidates_skewed(img: Image.Image, region: BBox, line_text: str, word_index: int,
+                              max_n: int = 3) -> list[WordLocation]:
+    """Deskew a tall/rotated map-label crop, locate upright, map AABB boxes back to full image."""
+    rx0, ry0, rx1, ry1 = region
+    sub = img.crop(region)
+    if sub.width < 16 or sub.height < 16:
+        return []
+    prev = POLARITY
+    try:
+        # Map labels are almost always dark ink on parchment; light polarity misreads the paper as ink.
+        set_polarity("dark")
+        angle = choose_deskew_angle(sub, line_text)
+        if angle is None:
+            return []
+        fill = paper_fill_color(sub)
+        rot, M, Minv = deskew_image(sub, angle, fill=fill)
+        upright = _locate_candidates_axis(rot, (0, 0, rot.width, rot.height), line_text, word_index, max_n=max_n)
+        out: list[WordLocation] = []
+        for loc in upright:
+            def to_full(b: BBox, _Minv=Minv, _rx0=rx0, _ry0=ry0) -> BBox:
+                local = map_box_affine(b, _Minv)
+                return _offset_box(local, _rx0, _ry0)
+
+            out.append(WordLocation(
+                word_box=to_full(loc.word_box),
+                erase_box=to_full(loc.erase_box),
+                line_box=to_full(loc.line_box),
+                baseline=to_full((0, loc.baseline, 1, loc.baseline + 1))[1],
+                ink_color=loc.ink_color,
+                words=[to_full(w) for w in loc.words],
+                skew_angle=float(angle),
+                skew_region=region,
+                upright_word_box=loc.word_box,
+                upright_erase_box=loc.erase_box,
+                upright_line_box=loc.line_box,
+                upright_words=list(loc.words),
+                upright_baseline=loc.baseline,
+            ))
+        # Prefer wide+short upright words (real map labels) over thin bands / river-aligned misses.
+        def _skew_key(c: WordLocation):
+            uw = c.upright_word_box
+            if not uw:
+                return (0, 0)
+            w, h = max(uw[2] - uw[0], 1), max(uw[3] - uw[1], 1)
+            return (w / h, w)
+        out.sort(key=_skew_key, reverse=True)
+        return out
+    finally:
+        set_polarity(prev)
+
+
+def locate_candidates(img: Image.Image, region: BBox, line_text: str, word_index: int, max_n: int = 3) -> list[WordLocation]:
+    """Candidate word locations inside `region`, best first.
+
+    Tall crops (map labels along rivers, etc.) are often rotated far from horizontal: try a deskew
+    path first and prefer it when it finds usable candidates. Otherwise fall back to axis-aligned
+    profile locate (body text, nameplates, banners).
+    """
+    rx0, ry0, rx1, ry1 = region
+    rw, rh = max(rx1 - rx0, 1), max(ry1 - ry0, 1)
+    if rh >= rw * 1.15:
+        try:
+            skewed = _locate_candidates_skewed(img, region, line_text, word_index, max_n=max_n)
+        except Exception:
+            skewed = []
+        if skewed:
+            return skewed
+    return _locate_candidates_axis(img, region, line_text, word_index, max_n=max_n)
+
 
 def locate_word(img: Image.Image, region: BBox, line_text: str, word_index: int) -> WordLocation:
     return locate_candidates(img, region, line_text, word_index, max_n=1)[0]

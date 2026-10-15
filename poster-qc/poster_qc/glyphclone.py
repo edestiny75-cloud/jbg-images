@@ -207,6 +207,31 @@ def _free_slack(src: Image.Image, line_box: BBox, box_right: int) -> int:
     ink = np.flatnonzero(cols > 0)
     return max(int(ink[0]) - 1, 0) if ink.size else limit - lx1
 
+def _ensure_min_cell_width(own: list[Cell], word_box: BBox, frac: float = 0.4) -> list[Cell]:
+    """Proportional splits often starve 'I' / thin glyphs to a few px; widen them so paste keeps a stem."""
+    if not own:
+        return own
+    widths = [c.box[2] - c.box[0] for c in own]
+    floor = max(int(round(float(np.median(widths)) * frac)), 3)
+    out: list[Cell] = []
+    for c in own:
+        w = c.box[2] - c.box[0]
+        if w >= floor:
+            out.append(c)
+            continue
+        need = floor - w
+        left, right = need // 2, need - need // 2
+        x0 = max(c.box[0] - left, word_box[0])
+        x1 = min(c.box[2] + right, word_box[2])
+        if x1 - x0 < floor:
+            # prefer expanding toward the side with remaining room
+            extra = floor - (x1 - x0)
+            x0 = max(x0 - extra, word_box[0])
+            x1 = min(x1 + extra, word_box[2])
+        out.append(Cell(c.char, (x0, c.box[1], x1, c.box[3]), c.baseline, c.line_h, c.clean, c.line_y))
+    return out
+
+
 def _layout(own: list[Cell], wrong: str, right: str, lib: GlyphLibrary, gap: int, scales: list[float] | None = None):
     """Place cells for `right`, keeping every untouched letter at its ORIGINAL x (shifted only by the
     width change of edits before it), so the poster's own letter spacing is preserved. Inserted or
@@ -229,8 +254,9 @@ def _layout(own: list[Cell], wrong: str, right: str, lib: GlyphLibrary, gap: int
                 anchor = own[0].box[0] + delta
             x = anchor
             old_cells = own[i1:i2] if tag == "replace" else []
+            med_w = int(round(float(np.median([c.box[2] - c.box[0] for c in own])))) if own else None
             for k, ch in enumerate(right[j1:j2]):
-                tw = (old_cells[k].box[2] - old_cells[k].box[0]) if k < len(old_cells) else None
+                tw = (old_cells[k].box[2] - old_cells[k].box[0]) if k < len(old_cells) else med_w
                 c = lib.get(ch, prefer=own, target_w=tw, target_h=own[0].line_h if own else None)
                 w, sy = cell_w(c)
                 items.append((c, x, w, sy))
@@ -277,6 +303,79 @@ def _repack(items, start: int, sq: float):
         prev_src_end = x + w
     return out, prev_end
 
+
+def surgical_insert(img: Image.Image, loc: WordLocation, wrong: str, right: str, lib: GlyphLibrary,
+                    box_right: int) -> tuple[Image.Image, BBox] | None:
+    """If `right` is `wrong` with a single contiguous insert (e.g. MISSSSIPPI→MISSISSIPPI), shift the
+    trailing letters right and paste only the new glyph(s). Returns None when the edit is not a
+    pure insert (caller should fall back to full clone_fix)."""
+    from .retype import erase
+    ops = SequenceMatcher(None, wrong, right, autojunk=False).get_opcodes()
+    inserts = [op for op in ops if op[0] == "insert"]
+    others = [op for op in ops if op[0] not in ("equal", "insert")]
+    if len(inserts) != 1 or others:
+        return None
+    _, i1, i2, j1, j2 = inserts[0]
+    if i1 != i2 or j2 - j1 < 1:
+        return None
+    own = _ensure_min_cell_width(segment_chars(img, loc.line_box, loc.word_box, wrong), loc.word_box)
+    if len(own) != len(wrong):
+        return None
+    med_w = int(round(float(np.median([c.box[2] - c.box[0] for c in own]))))
+    gaps = [own[i + 1].box[0] - own[i].box[2] for i in range(len(own) - 1)]
+    gap = max(int(np.median(gaps)), 1) if gaps else 1
+    new_cells = []
+    x = own[i1 - 1].box[2] + gap if i1 > 0 else own[0].box[0]
+    for ch in right[j1:j2]:
+        c = lib.get(ch, prefer=own, target_w=med_w, target_h=own[0].line_h if own else None)
+        w = c.box[2] - c.box[0]
+        new_cells.append((c, x, w))
+        x += w + gap
+    insert_span = (new_cells[-1][1] + new_cells[-1][2]) - (new_cells[0][1])
+    # Room: shift the suffix (own[i1:]) right by insert_span + gap, using slack to box_right / next word.
+    suffix_start = own[i1].box[0] if i1 < len(own) else loc.word_box[2]
+    wx0 = loc.word_box[0]
+    idx = next((i for i, wb in enumerate(loc.words) if abs(wb[0] - wx0) <= 2), None)
+    is_last = idx is None or idx + 1 >= len(loc.words)
+    slack = _free_slack(img, loc.line_box, box_right)
+    if is_last:
+        end_limit = loc.line_box[2] + max(slack, 0)
+        next_x0 = loc.line_box[2]
+    else:
+        next_x0 = loc.words[idx + 1][0]
+        end_limit = next_x0 - max(next_x0 - loc.word_box[2], 1) + max(slack, 0)
+    need = insert_span + gap
+    if suffix_start + need + (loc.word_box[2] - suffix_start) > end_limit + 1:
+        # not enough room without squeeze — decline surgical path
+        return None
+    out = img.copy()
+    LAST_INFO.clear()
+    LAST_INFO["wrong_used"] = wrong
+    LAST_INFO["surgical"] = True
+    # Shift suffix pixels (word body from insert point through word end, full line band).
+    shift = need
+    band_y0, band_y1 = loc.line_box[1], loc.line_box[3]
+    src_box = (suffix_start, band_y0, loc.word_box[2], band_y1)
+    if src_box[2] > src_box[0]:
+        patch = img.crop(src_box)
+        erase(out, src_box, ext=0.15)
+        out.paste(patch, (suffix_start + shift, band_y0))
+        # Clear the gap left for the new letter(s) (may still hold ghost of unshifted ink).
+        gap_box = (suffix_start, band_y0, suffix_start + shift, band_y1)
+        erase(out, gap_box, ext=0.15)
+    paper = _paper(img, loc.line_box)
+    changed = loc.erase_box
+    for c, x, w in new_cells:
+        b = _paste_ink(out, img, c, int(x), loc.baseline, width=int(w), paper=paper)
+        changed = _union(changed, b)
+    # Include shifted region in change box
+    if src_box[2] > src_box[0]:
+        changed = _union(changed, (suffix_start, band_y0, loc.word_box[2] + shift, band_y1))
+    W, H = out.size
+    changed = (max(changed[0], 0), max(changed[1], 0), min(changed[2], W), min(changed[3], H))
+    return out, changed
+
+
 LAST_INFO: dict = {}     # details of the most recent clone_fix (squeeze factor, token used)
 
 def reconcile_wrong(img: Image.Image, loc: WordLocation, wrong: str, alt: str | None) -> str:
@@ -301,7 +400,7 @@ def clone_fix(img: Image.Image, loc: WordLocation, wrong: str, right: str, lib: 
     LAST_INFO.clear()
     wrong = reconcile_wrong(src, loc, wrong, alt_wrong)
     LAST_INFO["wrong_used"] = wrong
-    own = segment_chars(src, loc.line_box, loc.word_box, wrong)
+    own = _ensure_min_cell_width(segment_chars(src, loc.line_box, loc.word_box, wrong), loc.word_box)
     gaps = [own[i + 1].box[0] - own[i].box[2] for i in range(len(own) - 1)]
     gap = max(int(np.median(gaps)), 0) if gaps else 1
     items = _layout(own, wrong, right, lib, gap)

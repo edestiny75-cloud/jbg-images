@@ -132,3 +132,52 @@ def test_clone_light_text_on_dark_banner():
     m = ink_mask(out.crop((0, 0, 420, 70)))
     assert m.mean() > 0.02                        # lettering still there (light ink preserved)
     assert outside_unchanged(big, out, [box])
+
+
+def test_clone_framed_nameplate_on_parchment():
+    """End-to-end: cream typo on a framed dark ribbon over parchment clones a Y without parchment leak."""
+    from PIL import Image, ImageDraw, ImageFont
+    import numpy as np
+    from poster_qc.locate import locate_word, set_polarity, tighten_region, ink_mask
+    from poster_qc.glyphclone import GlyphLibrary, clone_fix
+    from poster_qc.retype import outside_unchanged
+    from poster_qc import retype as rt
+
+    f = ImageFont.truetype(r"C:\\Windows\\Fonts\\georgiab.ttf", 26)
+    sheet = Image.new("RGB", (700, 420), (230, 216, 192))
+    rng = np.random.default_rng(2)
+    a = np.asarray(sheet).astype(np.float32) + rng.normal(0, 3, (420, 700, 3))
+    sheet = Image.fromarray(np.clip(a, 0, 255).astype(np.uint8))
+    d = ImageDraw.Draw(sheet)
+    # nameplate with typo
+    d.rectangle((120, 140, 580, 230), fill=(88, 24, 30))
+    d.rectangle((122, 142, 578, 228), outline=(205, 168, 85), width=5)
+    d.text((150, 168), "PRIVACT AND CONSUMERS", font=f, fill=(250, 245, 230))
+    # donor plate with Y
+    d.rectangle((120, 280, 400, 360), fill=(88, 24, 30))
+    d.rectangle((122, 282, 398, 358), outline=(205, 168, 85), width=4)
+    d.text((140, 305), "LIBERTY", font=f, fill=(250, 245, 230))
+
+    loose = (80, 100, 620, 270)
+    set_polarity("light")
+    rt.ALLOW_DONOR = False          # pipeline disables donor on light plates
+    try:
+        region = tighten_region(sheet, loose, "light")
+        loc = locate_word(sheet, region, "PRIVACT AND CONSUMERS", 0)
+        loc2 = locate_word(sheet, (120, 280, 400, 360), "LIBERTY", 0)
+        lib = GlyphLibrary.from_lines(sheet, [
+            ("PRIVACT AND CONSUMERS", loc.line_box, loc.words),
+            ("LIBERTY", loc2.line_box, loc2.words),
+        ])
+        before = sheet.copy()
+        out, box = clone_fix(sheet, loc, "PRIVACT", "PRIVACY", lib, box_right=loc.line_box[2] + 8)
+        assert outside_unchanged(before, out, [box])
+        # plate surface must stay dark (no parchment stamped in)
+        plate = np.asarray(out.crop((130, 150, 570, 220)))
+        assert plate.mean() < 140
+        # lettering still present as light ink
+        assert ink_mask(out.crop(loc.word_box)).mean() > 0.05
+        assert loc.ink_color[0] > 200
+    finally:
+        set_polarity("auto")
+        rt.ALLOW_DONOR = True
