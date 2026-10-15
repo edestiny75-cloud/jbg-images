@@ -5618,7 +5618,7 @@ function detailBody(sku,opts){
   const shipStats=`<div class="dstats">
     <div class="ds"><div class="ds-l">Item weight</div><div class="ds-v">${itemOz.toFixed(1)} oz</div></div>
     <div class="ds"><div class="ds-l">Shipping weight<small>item + ${mailer}</small></div><div class="ds-v">${shipOz.toFixed(1)} oz</div></div>
-    ${shN>1?`<div class="ds"><div class="ds-l">${isBinder?'Binder contents':'Bundle contents'}</div><div class="ds-v">${shN} ${pieceWord}s · 1 mailer · 1 FNSKU</div></div>`:`<div class="ds"><div class="ds-l">Unit</div><div class="ds-v">1 ${pieceWord} · 1 mailer</div></div>`}
+    ${shN>1?`<div class="ds"><div class="ds-l">${isBinder?'Binder contents':'Bundle contents'}</div><div class="ds-v">${shN} ${pieceWord}s · 1 mailer · 1 FNSKU</div><button class="btn ghost sm" style="margin-top:6px;padding:3px 10px;font-size:12px" onclick="editPieces('${esc(sku).replace(/'/g,"\\'")}')">✏ Edit pieces</button></div>`:`<div class="ds"><div class="ds-l">Unit</div><div class="ds-v">1 ${pieceWord} · 1 mailer</div><button class="btn ghost sm" style="margin-top:6px;padding:3px 10px;font-size:12px" onclick="editPieces('${esc(sku).replace(/'/g,"\\'")}')">✏ Edit pieces</button></div>`}
     <div class="ds hi"><div class="ds-l">Proposed case pack<small>20×14×10 box · 50 lb cap</small></div><div class="ds-v">${casePack} <span>per case</span></div></div>
     <div class="ds"><div class="ds-l">Full case weight</div><div class="ds-v">${fullLb} lb</div></div>
   </div>`;
@@ -5632,6 +5632,13 @@ function detailBody(sku,opts){
     ${opts.hidePrint?'':`<div class="dactions">${actions}${fnskuBtn}${zebraBtn}${p.pdf?`<button class="btn sm" onclick="openFieryPrompt('${esc(sku).replace(/'/g,"\\'")}')">🖨 Send → Fiery</button>`:''}</div>
     ${cfg.steps?`<div class="dsteps"><b>Fiery steps:</b> ${cfg.steps.replace(/^<b>[^<]*<\/b>\s*/,'')}</div>`:''}`}`;
 }
+// Fix how many posters/sheets ship in one unit (a bundle). Weight + case pack follow it. Saved to the products table for every device.
+function editPieces(sku){ const p=byRaw.get(sku); if(!p)return; const cur=(p.sheets_db)||sheetsOf(sku);
+  const v=prompt('How many '+(isBinderSku(sku)?'sheets':'posters')+' are in ONE unit of '+sku+'?  (1 = single, 4 = 4-pack bundle)',cur); if(v===null)return;
+  const n=parseInt(v,10); if(!(n>=1&&n<=200)){ toast('Enter a whole number from 1 to 200'); return; }
+  SB.from('products').update({sheets_per_unit:n,updated_at:new Date().toISOString()}).eq('sku',sku).then(({error})=>{
+    if(error){ toast('Save failed: '+error.message); return; }
+    p.sheets_db=n; toast(sku+' → '+n+' per unit (weight updated)'); renderModal(); }); }
 function openProduct(sku){STATE.prod=byRaw.get(sku)||PRODUCTS.find(p=>p.sku===sku);renderModal();}
 function closeProd(){STATE.prod=null;document.getElementById('pmodal').classList.remove('on');}
 function manualPrint(sku,size){const n=parseInt((document.getElementById('mpCopies')||{}).value||'1',10);const p=byRaw.get(sku)||{};queueFiery(sku,p.pdf||'',size,n);}
