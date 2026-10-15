@@ -606,6 +606,7 @@ tr.pq-selrow{background:rgba(78,207,154,.08)}
 .na-meta code{background:transparent;color:#9fb0c2;font-size:10.5px}
 .na-size{background:#20242c;color:#c3ccd7;font-weight:800;padding:1px 7px;border-radius:12px}
 .na-ago{margin-top:7px;font-size:11.5px;font-weight:800;color:#5fd88f}
+.zwhere{display:flex;gap:14px;margin-top:4px}.zwhere label{display:flex;align-items:center;gap:6px;font-weight:600;cursor:pointer}
 </style></head>
 <body>
 <div id="gate">
@@ -671,8 +672,9 @@ tr.pq-selrow{background:rgba(78,207,154,.08)}
     <form onsubmit="confirmZebra(event)">
       <label class="mini-field"><span id="zebraAsk">How many labels?</span><input id="zebraCopies" type="number" min="1" max="500" value="1"></label>
       <div class="mini-note" id="zebraBulkNote" style="display:none"></div>
-      <div class="mini-note">Prints 2.25 × 1.25 in single labels on the <b>Zebra ZD620</b>. The Zebra agent must be running on the print PC.</div>
-      <div class="mini-actions"><button type="button" class="btn ghost sm" onclick="closeZebra()">Cancel</button><button type="submit" class="btn sm">Print → Zebra</button></div>
+      <div class="mini-field"><span>Which printer?</span><div class="zwhere"><label><input type="radio" name="zebraWhere" value="shipping"> 📦 Shipping</label><label><input type="radio" name="zebraWhere" value="packing"> 🧰 Packing</label></div></div>
+      <div class="mini-note">Prints 2.25 × 1.25 in single labels on the chosen <b>Zebra ZD620</b>. The Zebra agent must be running on the print PC.</div>
+      <div class="mini-actions"><button type="button" class="btn ghost sm" onclick="closeZebra()">Cancel</button><button type="submit" class="btn sm" id="zebraGo">Print → Zebra</button></div>
     </form>
   </div>
 </div>
@@ -5667,24 +5669,28 @@ function closeFiery(){ const m=document.getElementById('fierymodal'); if(m)m.cla
 function confirmFiery(e){ if(e)e.preventDefault(); const sku=STATE.fierySku; const p=byRaw.get(sku)||{}; const n=Math.max(1,parseInt(document.getElementById('fieryCopies').value,10)||1);
   const size=(p.size)||sizeOf(sku); queueFiery(sku,p.pdf||'',size,n); closeFiery(); }
 // ---- Print single FNSKU label -> Zebra (asks how many, then queues for the Zebra agent) ----
-function openZebraPrompt(sku,qty,ctx){ STATE.zebraSku=sku; STATE.zebraCtx=ctx||null; STATE.zebraBulk=null; zebraModalMode(false); const m=document.getElementById('zebramodal'); if(!m)return; const p=byRaw.get(sku)||{};
+function openZebraPrompt(sku,qty,ctx){ STATE.zebraSku=sku; STATE.zebraCtx=ctx||null; STATE.zebraBulk=null; zebraModalMode(false); zebraWhereUi(); const m=document.getElementById('zebramodal'); if(!m)return; const p=byRaw.get(sku)||{};
   document.getElementById('zebraTitle').textContent=(p.title||sku); document.getElementById('zebraCode').textContent=(p.fnskuCode||'');
   const i=document.getElementById('zebraCopies'); i.value=qty||1; m.classList.add('on'); setTimeout(()=>{i.focus();i.select();},40); }
 // Bulk: several products at once (Wholesale tab). Each product's run starts with a "NEXT ITEM" separator label.
 function zebraModalMode(bulk){ document.getElementById('zebraCodeWrap').style.display=bulk?'none':''; document.getElementById('zebraAsk').textContent=bulk?'How many labels of EACH?':'How many labels?'; document.getElementById('zebraBulkNote').style.display=bulk?'':'none'; }
 function openZebraBulk(skus){ const ok=skus.filter(k=>(byRaw.get(k)||{}).fnskuCode), no=skus.length-ok.length;
   if(!skus.length){ toast('Check the rows you want first'); return; } if(!ok.length){ toast('None of the checked products has an FNSKU yet'); return; }
-  STATE.zebraBulk=ok; STATE.zebraSku=null; STATE.zebraCtx=null; zebraModalMode(true);
+  STATE.zebraBulk=ok; STATE.zebraSku=null; STATE.zebraCtx=null; zebraModalMode(true); zebraWhereUi();
   document.getElementById('zebraTitle').textContent=ok.length+' product'+(ok.length===1?'':'s');
   document.getElementById('zebraBulkNote').innerHTML='A <b>NEXT ITEM</b> separator label (poster name + picture) prints before each product, so the stacks are easy to split.'+(no?' <b>'+no+' checked product'+(no===1?' has':'s have')+' no FNSKU and will be skipped.</b>':'');
   const i=document.getElementById('zebraCopies'); i.value=1; document.getElementById('zebramodal').classList.add('on'); setTimeout(()=>{i.focus();i.select();},40); }
+// Which Zebra (shipping / packing) - remembered per computer
+const ZEBRA_NAMES={shipping:'Shipping Zebra',packing:'Packing Zebra'};
+function zebraWhere(){ let w='shipping'; try{ w=localStorage.getItem('jbg_zebra_where')||'shipping'; }catch(e){} return ZEBRA_NAMES[w]?w:'shipping'; }
+function zebraWhereUi(){ const w=zebraWhere(); document.querySelectorAll('input[name=zebraWhere]').forEach(r=>{ r.checked=(r.value===w); r.onchange=()=>{ try{localStorage.setItem('jbg_zebra_where',r.value);}catch(e){} zebraWhereUi(); }; }); const g=document.getElementById('zebraGo'); if(g)g.textContent='Print → '+ZEBRA_NAMES[w]; }
 function closeZebra(){ const m=document.getElementById('zebramodal'); if(m)m.classList.remove('on'); }
-function confirmZebra(e){ if(e)e.preventDefault(); const sku=STATE.zebraSku; const n=Math.min(500,Math.max(1,parseInt(document.getElementById('zebraCopies').value,10)||1));
+function confirmZebra(e){ if(e)e.preventDefault(); const sku=STATE.zebraSku; const n=Math.min(500,Math.max(1,parseInt(document.getElementById('zebraCopies').value,10)||1)); const where=zebraWhere(), wname=ZEBRA_NAMES[where];
   if(STATE.zebraBulk){ const list=STATE.zebraBulk, t0=Date.now();   // staggered created_at keeps the printer in the order shown on screen
-    const rows=list.map((k,i)=>({batch_id:null,product_sku:k,file_path:fnSingleUrl(k,'zpl'),size:'zebra-cover',copies:n,type:'fnsku',status:'queued',created_at:new Date(t0+i).toISOString()}));
-    SB.from('print_jobs').insert(rows).then(({error})=>{ toast(error?('Queue failed: '+error.message):('Sent '+n+'× FNSKU labels for '+list.length+' products → Zebra')); });
+    const rows=list.map((k,i)=>({batch_id:null,product_sku:k,file_path:fnSingleUrl(k,'zpl'),size:'zebra-cover',copies:n,type:'fnsku',printer:where,status:'queued',created_at:new Date(t0+i).toISOString()}));
+    SB.from('print_jobs').insert(rows).then(({error})=>{ toast(error?('Queue failed: '+error.message):('Sent '+n+'× FNSKU labels for '+list.length+' products → '+wname)); });
     STATE.zebraBulk=null; closeZebra(); return; }
-  SB.from('print_jobs').insert({batch_id:CURRENT_BATCH?CURRENT_BATCH.id:null,product_sku:sku,file_path:fnSingleUrl(sku,'zpl'),size:'zebra',copies:n,type:'fnsku',status:'queued'}).then(({error})=>{ toast(error?('Queue failed: '+error.message):('Sent '+n+'× FNSKU label → Zebra')); });
+  SB.from('print_jobs').insert({batch_id:CURRENT_BATCH?CURRENT_BATCH.id:null,product_sku:sku,file_path:fnSingleUrl(sku,'zpl'),size:'zebra',copies:n,type:'fnsku',printer:where,status:'queued'}).then(({error})=>{ toast(error?('Queue failed: '+error.message):('Sent '+n+'× FNSKU label → '+wname)); });
   const c=STATE.zebraCtx; if(c){ const b=STATE.boxes.find(x=>x.box_no===c.box); const it=b&&b.items[c.ix]; if(it&&it.sku===sku){ it.label='fnsku'; sbItem(it,{label_status:'fnsku'}); render(); } }   // Packer: mark the item's FNSKU label as printed
   closeZebra(); }
 // ---- Create quote (single product → downloadable/printable form + logs to the product) ----
