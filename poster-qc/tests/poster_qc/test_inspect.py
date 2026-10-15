@@ -55,3 +55,16 @@ def test_find_lines_containing_empty_when_no_match():
     reply = json.dumps({"lines": []})
     client = FakeClient([reply])
     assert find_lines_containing(client, img, "Zzzyx", model="m", tile=1000, overlap=0) == []
+
+def test_find_lines_containing_char_needle_asks_for_character():
+    """Single-character needle uses the contains-character prompt (missing-glyph path)."""
+    img = Image.new("RGB", (1000, 1000), "white")
+    reply = json.dumps({"lines": [{"text": "the house", "tile": 0, "bbox": [0.0, 0.2, 0.4, 0.3]}]})
+    client = FakeClient([reply])
+    lines = find_lines_containing(client, img, "h", model="m", tile=1000, overlap=0)
+    assert lines == [{"text": "the house", "bbox": [0, 200, 400, 300]}]
+    ask = client.messages.calls[0]["messages"][0]["content"][-1]["text"]
+    assert "character" in ask.lower()
+    assert "'h'" in ask or '"h"' in ask
+    assert "exact word" not in ask.lower()
+

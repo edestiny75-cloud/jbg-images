@@ -101,18 +101,35 @@ def inspect_poster(client, img: Image.Image, known: list[tuple[str, str]] | None
 def find_lines_containing(client, img: Image.Image, needle: str, model: str = config.DEFAULT_MODEL,
                           tile: int = 900, overlap: int = 120) -> list[dict]:
     """One vision call: find every line anywhere on the poster (not just the finding's own text box)
-    that contains the exact word `needle` (correctly spelled), for extending a GlyphLibrary when a
-    needed character isn't available locally. Returns [{"text": str, "bbox": [full-image x0,y0,x1,y1]}]."""
+    that can donate glyphs for a missing character.
+
+    - If `needle` is a single character: find lines that contain that character (inside any word).
+      This is the important missing-glyph path — e.g. Busk→Bush needs 'h' from "the", not from "Bush".
+    - Otherwise: find lines containing the exact word `needle` (correctly spelled).
+
+    Returns [{"text": str, "bbox": [full-image x0,y0,x1,y1]}].
+    """
     tiles = grid_tiles(img, tile=tile, overlap=overlap)
     content = [{"type": "text", "text": "FULL POSTER (for context):"}, image_block(img)]
     for t in tiles:
         content.append({"type": "text", "text": f"TILE {t.index} covers full-image box {t.box}:"})
         content.append(image_block(t.image))
-    content.append({"type": "text", "text":
-        f'Find every line of text anywhere on this poster (in any box) that contains the exact word '
-        f'"{needle}" spelled correctly, as printed. Output only JSON: {{"lines":[{{"text":str,"tile":int,'
-        f'"bbox":[x0,y0,x1,y1 normalized 0-1 within that tile, covering the WHOLE LINE]}}]}}. '
-        f'If there are none, output {{"lines":[]}}.'})
+    if len(needle) == 1:
+        ask = (
+            f'Find every line of text anywhere on this poster (in any box) that contains the character '
+            f'{needle!r} exactly as printed (case-sensitive; a letter inside a longer word counts). '
+            f'Output only JSON: {{"lines":[{{"text":str,"tile":int,'
+            f'"bbox":[x0,y0,x1,y1 normalized 0-1 within that tile, covering the WHOLE LINE]}}]}}. '
+            f'If there are none, output {{"lines":[]}}.'
+        )
+    else:
+        ask = (
+            f'Find every line of text anywhere on this poster (in any box) that contains the exact word '
+            f'"{needle}" spelled correctly, as printed. Output only JSON: {{"lines":[{{"text":str,"tile":int,'
+            f'"bbox":[x0,y0,x1,y1 normalized 0-1 within that tile, covering the WHOLE LINE]}}]}}. '
+            f'If there are none, output {{"lines":[]}}.'
+        )
+    content.append({"type": "text", "text": ask})
     msg = client.messages.create(model=model, max_tokens=4000, messages=[{"role": "user", "content": content}])
     m = re.search(r"\{.*\}", text_of(msg), re.S)
     data = json.loads(m.group(0)) if m else {"lines": []}

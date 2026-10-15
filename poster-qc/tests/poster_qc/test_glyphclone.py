@@ -181,3 +181,83 @@ def test_clone_framed_nameplate_on_parchment():
     finally:
         set_polarity("auto")
         rt.ALLOW_DONOR = True
+
+
+def test_chars_needed_for_edit_lists_insert_and_replace():
+    from poster_qc.glyphclone import chars_needed_for_edit
+    assert chars_needed_for_edit("Busk", "Bush") == ["h"]
+    assert chars_needed_for_edit("Pennsylvaia,", "Pennsylvania,") == ["n"]
+    assert chars_needed_for_edit("cos", "Cos") == ["C"]
+    assert chars_needed_for_edit("same", "same") == []
+
+
+def test_library_has_and_missing_in_with_casefold():
+    from poster_qc.glyphclone import GlyphLibrary, Cell, SAFE_CASEFOLD
+    lib = GlyphLibrary()
+    # fabricate a lone capital S cell (no real pixels needed for has/missing_in)
+    lib.cells["S"] = [Cell("S", (0, 0, 8, 12), 12, 14, True, 0)]
+    assert "S" in SAFE_CASEFOLD and "s" in SAFE_CASEFOLD
+    assert lib.has("S") and lib.has("s")                 # safe casefold
+    assert not lib.has("h") and not lib.has("H")         # H/h not safe-folded
+    # 'o'/'O' absent; 's' filled via casefold unless disabled
+    assert lib.missing_in("Sos") == ["o"]
+    assert lib.missing_in("Sos", allow_casefold=False) == ["o", "s"]
+
+
+def test_get_casefold_uses_safe_opposite_case():
+    from poster_qc.glyphclone import GlyphLibrary, LAST_INFO
+    img, f, _ = line_image("SOS CALL")
+    loc = locate_word(img, (0, 0, img.width, img.height), "SOS CALL", 0)
+    lib = GlyphLibrary.from_lines(img, [("SOS CALL", loc.line_box, loc.words)])
+    LAST_INFO.clear()
+    # lowercase s is absent; capital S is present and safe to casefold
+    assert "s" not in lib.cells or not lib.cells["s"]
+    cell = lib.get("s", target_h=loc.line_box[3] - loc.line_box[1])
+    assert cell.char == "S"
+    assert LAST_INFO.get("casefold") == ["S->s"]
+
+
+def test_clone_uses_casefold_donor_for_safe_letter():
+    """cos -> Cos needs 'C'; only 'c' exists on the line — safe casefold supplies it."""
+    img, f, _ = line_image("cos of angle")
+    before = img.copy()
+    loc = locate_word(img, (0, 0, img.width, img.height), "cos of angle", 0)
+    lib = GlyphLibrary.from_lines(img, [("cos of angle", loc.line_box, loc.words)])
+    assert "C" not in lib.cells
+    out, box = clone_fix(img, loc, "cos", "Cos", lib, box_right=img.width)
+    assert outside_unchanged(before, out, [box])
+    from poster_qc.glyphclone import LAST_INFO
+    assert LAST_INFO.get("casefold")  # recorded C<-c (or c->C)
+
+
+def test_clone_borrows_missing_letter_from_other_known_line():
+    """Busk -> Bush needs 'h'; donor line 'the house' provides it without vision."""
+    a, _, _ = line_image("Busk")
+    b, _, _ = line_image("the house")
+    W = max(a.width, b.width)
+    H = a.height + b.height
+    img = Image.new("RGB", (W, H), a.getpixel((0, 0)))
+    img.paste(a, (0, 0))
+    img.paste(b, (0, a.height))
+    before = img.copy()
+    loc = locate_word(img, (0, 0, W, a.height), "Busk", 0)
+    loc2 = locate_word(img, (0, a.height, W, H), "the house", 0)
+    lib = GlyphLibrary.from_lines(img, [
+        ("Busk", loc.line_box, loc.words),
+        ("the house", loc2.line_box, loc2.words),
+    ])
+    assert "h" in lib.cells
+    out, box = clone_fix(img, loc, "Busk", "Bush", lib, box_right=W)
+    assert outside_unchanged(before, out, [box])
+    # ink still present in the word region
+    assert ink_mask(out.crop(loc.word_box)).mean() > 0.05
+
+
+def test_clone_raises_when_glyph_truly_absent_even_with_casefold():
+    """No h/H anywhere; H is not SAFE_CASEFOLD so capital-only posters still NoGlyph."""
+    img, f, _ = line_image("Busk")
+    loc = locate_word(img, (0, 0, img.width, img.height), "Busk", 0)
+    lib = GlyphLibrary.from_lines(img, [("Busk", loc.line_box, loc.words)])
+    assert not lib.has("h")
+    with pytest.raises(NoGlyph):
+        clone_fix(img, loc, "Busk", "Bush", lib, box_right=img.width)
