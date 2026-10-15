@@ -143,19 +143,83 @@ def _similar(a: str, b: str) -> float:
 
 LINE_MATCH_MIN = 0.75
 
+_PUNCT_EDGE = ".,;:!?" + '"' + "'" + "()"
+
+
+def _split_edge_punct(token: str) -> tuple[str, str, str]:
+    """Split a token into (leading_punct, core, trailing_punct)."""
+    i = 0
+    while i < len(token) and token[i] in _PUNCT_EDGE:
+        i += 1
+    j = len(token)
+    while j > i and token[j - 1] in _PUNCT_EDGE:
+        j -= 1
+    return token[:i], token[i:j], token[j:]
+
+
+def _token_core(token: str) -> str:
+    """Letters/digits core with edge punctuation stripped (case preserved)."""
+    return _split_edge_punct(token)[1]
+
+
+def _with_printed_punct(token: str, printed: str) -> str:
+    """Keep token spelling core; adopt missing edge punctuation from the printed line token.
+
+    Claude often quotes wrong/right without the comma/period attached on the poster. Locate and
+    glyphclone need the punctuation that actually sits in the word box.
+    """
+    if not token:
+        return token
+    lead_p, _, trail_p = _split_edge_punct(printed)
+    lead_t, core, trail_t = _split_edge_punct(token)
+    if not core:
+        return token
+    return f"{lead_t or lead_p}{core}{trail_t or trail_p}"
+
+
+def _looks_like_spelling(wrong: str, right: str) -> bool:
+    """True when a fact finding is really a near-miss spelling/typo (auto-fix worthy).
+
+    Real fact swaps (Congress->House) stay review; letter-level name typos promote to spelling.
+    """
+    w, r = _norm(wrong), _norm(right)
+    if not w or not r or w == r:
+        return False
+    ratio = SequenceMatcher(None, w, r, autojunk=False).ratio()
+    max_drift = max(2, min(len(w), len(r)) // 5)
+    return ratio >= 0.72 and abs(len(w) - len(r)) <= max_drift
+
+
 def _normalize_index(f: Finding) -> None:
-    """Claude's word_index is sometimes off by one; trust the token text over the index."""
+    """Claude word_index is sometimes off by one; trust the token text over the index.
+
+    Also harden punctuation: match by folded core (not substring), then sync attached punctuation
+    from the printed line token onto wrong/right so locate/clone see the ink as printed.
+    """
     toks = f.line_text.split()
     if not toks:
         return
-    if f.word_index >= len(toks) or toks[f.word_index] != f.wrong:
+    idx = f.word_index if 0 <= f.word_index < len(toks) else None
+    matched = None
+    if idx is not None and (_norm(toks[idx]) == _norm(f.wrong) or _token_core(toks[idx]) == _token_core(f.wrong)):
+        matched = idx
+    if matched is None:
         if f.wrong in toks:
-            f.word_index = toks.index(f.wrong)
+            matched = toks.index(f.wrong)
         else:
-            # token containing the wrong text (e.g. Claude quoted without punctuation)
+            wn = _norm(f.wrong)
+            wc = _token_core(f.wrong)
             for i, t in enumerate(toks):
-                if f.wrong.strip(".,;:!?\"'()") and f.wrong.strip(".,;:!?\"'()") in t:
-                    f.word_index = i; break
+                if (wn and _norm(t) == wn) or (wc and _token_core(t) == wc):
+                    matched = i
+                    break
+    if matched is None:
+        return
+    f.word_index = matched
+    printed = toks[matched]
+    f.wrong = _with_printed_punct(f.wrong, printed)
+    f.right = _with_printed_punct(f.right, printed)
+
 
 WORD_MATCH_MIN = 0.7
 WORD_MATCH_STRONG = 0.9     # required when the line read-back only loosely matched
@@ -516,19 +580,26 @@ def _known_matches(f: Finding, w: str, r: str) -> bool:
     return fw in wt and fr in rt and fw != fr
 
 def _policy(f: Finding, known=None) -> None:
-    """Mark findings that must not be auto-fixed as 'review' (reported, untouched).
-    Errors listed in the instructions file are always eligible, whatever kind Claude assigned."""
+    """Mark findings that must not be auto-fixed as review (reported, untouched).
+    Errors listed in the instructions file are always eligible, whatever kind Claude assigned.
+    Fact findings that look like letter-level spelling typos are promoted to spelling."""
     if f.status != "open":
         return
     if known and any(_known_matches(f, w, r) for w, r in known):
         f.confidence = max(f.confidence, 0.99)
+        # Known instruction pairs are always auto-fix eligible even if Claude said fact.
+        if f.kind == "fact":
+            f.kind = "spelling"
         return
+    if f.kind == "fact" and _looks_like_spelling(f.wrong, f.right):
+        f.kind = "spelling"
     if _norm(f.wrong) == _norm(f.right) and f.wrong == f.right:
         f.status = "skipped"; return                      # no actual change proposed
     if f.confidence < config.NOTE_MIN_CONFIDENCE:
         f.status = "skipped"; return                      # too weak even to bother a human with
     if f.kind not in config.AUTO_FIX_KINDS or f.confidence < config.AUTO_FIX_MIN_CONFIDENCE:
         f.status = "review"
+
 
 def run_poster(path: str | Path, out_dir: str | Path, client, openai_client=None, known=None,
                model: str = config.DEFAULT_MODEL, max_rounds: int = config.MAX_ROUNDS, fix: bool = True,
@@ -653,7 +724,9 @@ def run_poster(path: str | Path, out_dir: str | Path, client, openai_client=None
         # full re-inspect: anything new (including anything a backend's edit introduced) goes into the
         # next round
         try:
-            new = inspect_poster(client, img, known=None, model=model, tile=tile, overlap=overlap)
+            # Pass known errors on re-inspect so instruction-file must-finds are still located
+            # after a round of edits (and stay auto-fix eligible via _policy).
+            new = inspect_poster(client, img, known=known, model=model, tile=tile, overlap=overlap)
         except Exception as e:  # noqa: BLE001 - never lose a round to a bad re-inspect reply
             res.notes.append(f"round {rnd}: re-inspect failed ({type(e).__name__}: {e})")
             log(f"  re-inspect failed: {e}"); new = []
@@ -661,7 +734,7 @@ def run_poster(path: str | Path, out_dir: str | Path, client, openai_client=None
         seen = {(x.line_text, x.wrong) for x in res.findings}
         for n in new:
             if (n.line_text, n.wrong) not in seen:
-                _policy(n)
+                _policy(n, known)
                 res.findings.append(n)
                 log(f"  new finding [{n.id}] {n.box_name}: {n.wrong!r} -> {n.right!r} ({n.kind}, conf {n.confidence:.2f}) status={n.status}")
         if not any(f.status == "open" for f in res.findings):
