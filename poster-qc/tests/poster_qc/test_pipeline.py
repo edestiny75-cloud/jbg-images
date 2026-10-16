@@ -249,3 +249,46 @@ def test_run_poster_missing_glyph_char_search_not_whole_word(tmp_path):
     assert donor_asks, "expected a find_lines_containing character ask"
     assert all("exact word" not in a.lower() for a in donor_asks)
     assert any("'h'" in a or '"h"' in a for a in donor_asks)
+
+def test_apply_fix_date_token_uses_surgical_digit(monkeypatch):
+    """Founding-Fathers-style date typo goes through surgical-digit, not full-word clone."""
+    from poster_qc import pipeline as pl
+    from poster_qc.glyphclone import LAST_INFO
+    from poster_qc.models import Finding
+    from poster_qc.locate import locate_word
+    from poster_qc.glyphclone import GlyphLibrary
+    import numpy as np
+    from PIL import Image, ImageDraw, ImageFont
+    from tests.poster_qc.synth import PARCHMENT, INK, FONT
+
+    fnt = ImageFont.truetype(FONT, 28)
+    sheet = Image.new("RGB", (500, 260), PARCHMENT)
+    rng = np.random.default_rng(3)
+    a = np.asarray(sheet).astype(np.float32) + rng.normal(0, 3, (260, 500, 3))
+    sheet = Image.fromarray(np.clip(a, 0, 255).astype(np.uint8))
+    d = ImageDraw.Draw(sheet)
+    d.text((30, 40), "1743-1B26", font=fnt, fill=INK)
+    d.text((30, 120), "1735-1826", font=fnt, fill=INK)
+    loc = locate_word(sheet, (20, 30, 280, 100), "1743-1B26", 0)
+    loc2 = locate_word(sheet, (20, 110, 280, 180), "1735-1826", 0)
+
+    f = Finding(
+        id="t1", box_name="T", line_text="1743-1B26", wrong="1743-1B26", right="1743-1826",
+        word_index=0, font_style="plain", kind="spelling", confidence=0.95,
+        bbox=list(loc.word_box),
+        box_lines=[
+            {"text": "1743-1B26", "bbox": list(loc.line_box)},
+            {"text": "1735-1826", "bbox": list(loc2.line_box)},
+        ],
+        box_bbox=list(loc.line_box),
+    )
+
+    # Avoid vision locate checks
+    def fake_locate(img, finding, client, model, loc_cache=None):
+        return loc
+    monkeypatch.setattr(pl, "_locate_checked", fake_locate)
+
+    out, box, note = pl.apply_fix(sheet, f, "glyphclone", openai_client=None, client=None,
+                                   donor_lines=[{"text": "1735-1826", "bbox": list(loc2.line_box)}])
+    assert "surgical-digit" in note
+    assert LAST_INFO.get("surgical_digit") is True

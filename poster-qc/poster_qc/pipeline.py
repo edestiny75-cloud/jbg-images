@@ -9,7 +9,7 @@ from difflib import SequenceMatcher
 import re as _re
 from .locate import locate_word
 from .retype import retype_word, outside_unchanged
-from .glyphclone import GlyphLibrary, clone_fix, NoGlyph
+from .glyphclone import GlyphLibrary, clone_fix, NoGlyph, surgical_digit_replace, is_short_date_token
 from .inpaint_openai import inpaint_word, build_prompt
 from .verify import verify_fix
 from .tiles import crop_zoom
@@ -561,29 +561,51 @@ def apply_fix(img: Image.Image, f: Finding, backend: str, openai_client, client,
         return _apply_fix_skewed(img, f, loc, backend, openai_client, client, model, expected_line)
     if backend == "glyphclone":
         lines = _locate_lines(img, f.box_lines)
-        # Poster-wide harvest from lines Claude already transcribed (other boxes) — no API cost.
+        # Poster-wide harvest from lines Claude already transcribed (other boxes) - no API cost.
         if donor_lines:
             lines = lines + _locate_lines(img, donor_lines)
         lib = GlyphLibrary.from_lines(img, lines)
         box_right = (f.box_bbox or f.bbox)[2]
         alt = getattr(f, "read_line_token", None) or getattr(f, "read_wrong", None)
+        from . import glyphclone as _gc
+        wrong_used = _gc.reconcile_wrong(img, loc, f.wrong, alt)
+        # Short date tokens (YYYY-YYYY / typo dates): surgical single-glyph replace with
+        # strict ink-height donor match. Full-word clone_fix erases every digit and leaves
+        # parchment patches (Founding Fathers style=15). No size-matched digit -> raise NoGlyph
+        # so the runner can escalate cleanly to NEEDS_HUMAN (skip costly patchy inpaint).
+        if is_short_date_token(wrong_used) and is_short_date_token(f.right):
+            try:
+                surgical = surgical_digit_replace(img, loc, wrong_used, f.right, lib)
+            except NoGlyph:
+                raise
+            if surgical is not None:
+                out, box = surgical
+                info = dict(_gc.LAST_INFO)
+                note = f"surgical-digit {info.get('wrong_used', f.wrong)!r} -> {f.right!r}"
+                if info.get("digit_fixes"):
+                    bits = [f"{d['from']}->{d['to']}@{d['h_ratio']}" for d in info["digit_fixes"]]
+                    note += f" ({', '.join(bits)})"
+                return out, box, note
+            # not a pure equal-length replace: fall through to clone_fix / escalate below
         try:
             out, box = clone_fix(img, loc, f.wrong, f.right, lib, box_right=box_right, alt_wrong=alt)
         except NoGlyph as e:
             # A NoGlyph whose message is a single character means GlyphLibrary.get() couldn't find that
             # character anywhere yet (see glyphclone.GlyphLibrary.get raising NoGlyph(ch)); other NoGlyph
             # messages (overflow past available slack) mean cloning can't work here at all, so re-raise.
+            # For short date tokens, do NOT vision-hunt a wrong-size digit — escalate instead.
+            if is_short_date_token(wrong_used) and is_short_date_token(f.right):
+                raise
             if len(str(e)) == 1:
                 ch = str(e)
                 # Search for the missing CHARACTER anywhere (not only the full corrected word).
-                # Whole-word search missed common donors like "the" when fixing Busk→Bush.
+                # Whole-word search missed common donors like "the" when fixing Busk->Bush.
                 extra = find_lines_containing(client, img, ch, model=config.DEFAULT_MODEL)
                 lines = lines + _locate_lines(img, extra)
                 lib = GlyphLibrary.from_lines(img, lines)
                 out, box = clone_fix(img, loc, f.wrong, f.right, lib, box_right=box_right, alt_wrong=alt)
             else:
                 raise
-        from . import glyphclone as _gc
         info = dict(_gc.LAST_INFO)
         note = f"glyphclone {info.get('wrong_used', f.wrong)!r} -> {f.right!r}"
         if info.get("squeeze"):
@@ -750,6 +772,15 @@ def run_poster(path: str | Path, out_dir: str | Path, client, openai_client=None
                             _rt.ALLOW_DONOR = not _rt.ALLOW_DONOR
                     if att.passed:
                         img = after; f.status = "fixed"; break
+                except NoGlyph as e:
+                    # Short date tokens with no size-matched digit donor: clean NEEDS_HUMAN.
+                    # Do not burn OpenAI inpaint (patchy + costly) on these — Founding Fathers lesson.
+                    f.attempts.append(FixAttempt(backend=backend, round=rnd, note=f"error: {e}"))
+                    log(f"  [{f.id}] {f.wrong!r} -> {f.right!r} via {backend}: ERROR NoGlyph: {e}")
+                    if backend == "glyphclone" and is_short_date_token(f.wrong) and is_short_date_token(f.right):
+                        log(f"  [{f.id}] date/digit: no size-matched donor -> NEEDS_HUMAN (skip inpaint)")
+                        f.status = "needs_human"
+                        break
                 except Exception as e:  # noqa: BLE001 - record and escalate to the next backend
                     f.attempts.append(FixAttempt(backend=backend, round=rnd, note=f"error: {e}"))
                     log(f"  [{f.id}] {f.wrong!r} -> {f.right!r} via {backend}: ERROR {type(e).__name__}: {e}")
