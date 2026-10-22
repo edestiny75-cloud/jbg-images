@@ -196,6 +196,7 @@ input::placeholder{color:#6b7686}
 code.ok{color:var(--mint);border-color:#245139;background:#10201a}
 .asin-pill{display:inline-flex;align-items:center;gap:2px;font-family:ui-monospace,Menlo,monospace;font-size:12px;font-weight:700;color:#8fc7ff !important;background:#11243a;border:1px solid #23507f;padding:3px 9px;border-radius:7px;text-decoration:none;white-space:nowrap}
 .asin-pill:hover{background:#163150;color:#bfe0ff !important}
+.fnsku-pill{display:inline-flex;align-items:center;font-family:ui-monospace,Menlo,monospace;font-size:12px;font-weight:700;color:#ffc86e;background:#2a1f0a;border:1px solid #5a4018;padding:3px 9px;border-radius:7px;white-space:nowrap}
 .muted-s{color:#5f6b78;font-size:12px}
 .mapin{background:#0f1115;border:1px solid #3a2f14;color:#fff}
 /* soft rounded tables + hover rows */
@@ -237,9 +238,11 @@ tr.held{opacity:.5}
 .dstats .ds.hi .ds-v{color:#fff}.dstats .ds.hi .ds-v span{color:#d3e6fb}
 .bstrip code{background:#0f1115;color:#8fc7ff}
 .bstrip.bad{background:#3a1a18;color:#ff8f8a}
+.bstrip.multi{background:#2a3a12;color:#d4ff8f;border:1px solid #5a7a2a}
 .emptybox{background:var(--panel);border:1px dashed #333a45;border-radius:16px;padding:40px 20px;text-align:center;margin-top:10px}
 .eb-title{font-size:16px;font-weight:700;color:#c3ccd7;margin-bottom:16px}
 .tag.bundle{background:#3a2f14;color:#e6c072;border:1px solid #6a5620}
+.tag.multi{background:#2a3a12;color:#d4ff8f;border:1px solid #5a7a2a}
 .tag.set{background:#2a2416;color:#e0c98a}
 .tag.old2{background:#3a1a18;color:#ff8f8a}
 .pm-img{width:180px;height:230px;border-radius:11px;background:#dfe8e2;display:flex;align-items:center;justify-content:center;font-weight:800;color:#6b8577;overflow:hidden;flex:0 0 auto}
@@ -269,6 +272,7 @@ tr.held{opacity:.5}
 .oc-count{font-size:12px;font-weight:700;color:#8397ab;text-transform:uppercase;letter-spacing:.05em}
 .oc-img{height:260px;background:#dfe8e2;border-radius:12px;margin:10px 0;display:flex;align-items:center;justify-content:center;font-weight:800;color:#6b8577;font-size:16px;overflow:hidden}
 .oc-img img{width:100%;height:100%;object-fit:contain}
+.oc-multi{background:#2a3a12;color:#d4ff8f;border:1px solid #5a7a2a;border-radius:9px;padding:10px 14px;font-size:15px;font-weight:600;margin-bottom:10px}
 .oc-qty{font-size:30px;font-weight:800;color:var(--ink)}.oc-qty b{color:var(--mint-d)}
 .oc-sku{margin:5px 0}.oc-sku code{font-size:13px}
 .oc-title{font-size:12.5px;color:#5b6b7f;margin-bottom:14px;min-height:16px}
@@ -4920,11 +4924,11 @@ function catOrderProd(a,b){const pa=presRank(a.sku),pb=presRank(b.sku); if(pa!=n
   const ba=isBundleProd(a)?1:0,bb=isBundleProd(b)?1:0;return (ba-bb)||skuNumCmp(a.sku,b.sku);}
 function catOrderRow(a,b){const pa=presRank(a.sku),pb=presRank(b.sku); if(pa!=null&&pb!=null)return pa-pb;
   const ba=(a.bundle||isBundleFile(a.sku))?1:0,bb=(b.bundle||isBundleFile(b.sku))?1:0;return (ba-bb)||skuNumCmp(a.sku,b.sku);}
-function catBadges(p){const bund=isBundleProd(p); return `<div class="cbadges">`+
-  (bund?'<span class="tag bundle">📦 Bundle</span>':(p.badge==='set'?'<span class="tag set">⭐ Set</span>':''))+
+function catBadges(p){const bund=isBundleProd(p); const mp=p.sku.endsWith('-2')&&(p.sheets_db||1)>1; return `<div class="cbadges">`+
+  (mp?'<span class="tag multi">📦 2-Pack</span>':(bund?'<span class="tag bundle">📦 Bundle</span>':(p.badge==='set'?'<span class="tag set">⭐ Set</span>':'')))+
   `<span class="tag ${sizeOfProd(p)==='8.5x11'?'a':''}">${sizeOfProd(p)}</span>`+
   (p.pdf?'<span class="tag ok">print</span>':'')+
-  (p.fnsku?'<span class="tag">🏷️</span>':'')+
+  ((p.fnsku||p.fnskuCode)?'<span class="tag">🏷️</span>':'')+
   (isOld(p)?'<span class="tag old2">OLD</span>':'')+`</div>`;}
 function lev(a,b){const m=a.length,n=b.length,d=Array.from({length:m+1},(_,i)=>[i,...Array(n).fill(0)]);for(let j=0;j<=n;j++)d[0][j]=j;for(let i=1;i<=m;i++)for(let j=1;j<=n;j++)d[i][j]=Math.min(d[i-1][j]+1,d[i][j-1]+1,d[i-1][j-1]+(a[i-1]===b[j-1]?0:1));return d[m][n];}
 function stripSuffix(n){let x=n,c=true;while(c){c=false;let y=x.replace(/-FBA$/,'');if(y!==x){x=y;c=true;}y=x.replace(/-[0-9]$/,'');if(y!==x){x=y;c=true;}}return x;}
@@ -5337,6 +5341,7 @@ function viewPacker(){
       return `<h1>Packer · iPad</h1><p class="sub">Pick a box, then click through it one item at a time — big picture, the exact amount to pick, and the <b>UPC / FNSKU / WPS</b> label. Two packers can each take a different box.</p>${picker}${body}`;
     }
     const i=ab.items[step];
+    const iProd=byRaw.get(i.sku)||{};
     const addOpts=addSrc.slice().sort(catOrderRow)
       .map(r=>`<option value="${esc(r.sku)}">${esc(shortName(r))} · ${r.size} · ${esc(r.sku)}</option>`).join('');
     const addPanel=`<div class="addrow">
@@ -5355,6 +5360,7 @@ function viewPacker(){
         <div class="oc-count">Item ${step+1} of ${total} · Box ${ab.box_no}</div>
         <div class="oc-detail">${detailBody(i.sku,{hidePrint:true})}</div>
         <div class="oc-pick">
+          ${(iProd.sheets_db||1)>1&&i.sku.endsWith('-2')?`<div class="oc-multi">📦 ${iProd.sheets_db}-PACK · grab <b>${i.qty*(iProd.sheets_db||1)}</b> binders total · ${i.qty} FNSKU label${i.qty>1?'s':''}</div>`:''}
           <div class="oc-qty">PICK <b>${i.qty}</b>×</div>
           <div class="oc-adjust">Packed <input type="number" min="0" max="${i.qty}" value="${i.actual}" onchange="setActual(${ab.box_no},${step},this.value)"> of ${i.qty}
             ${i.actual<i.qty?`<span class="short">SHORT ${i.qty-i.actual}</span>`:'<span class="okmark">✓ full</span>'}</div>
@@ -5363,6 +5369,7 @@ function viewPacker(){
             <button class="${i.label==='fnsku'?'done':''}" onclick="printLabel(${ab.box_no},${step},'fnsku')">Print FNSKU → Zebra</button>
             <button class="${i.label==='wps'?'done':''}" onclick="printLabel(${ab.box_no},${step},'wps')">Print WPS</button>
           </div>`:'<div class="oc-nolbl">Wholesale — no Amazon labels</div>'}
+          ${iProd.pdf?`<div class="oc-lbls" style="margin-top:6px"><button class="btn sm" onclick="openFieryPrompt('${esc(i.sku).replace(/'/g,"\\'")}')">🖨 Send → Fiery</button>${iProd.pdf12x18?`<button class="btn ghost sm" onclick="openFieryPrompt('${esc(i.sku).replace(/'/g,"\\'")}','8.5x11')">🖨 8.5×11 → Fiery</button>`:''}</div>`:''}
           <label class="oc-check"><input type="checkbox" ${i.picked?'checked':''} onchange="togglePick(${ab.box_no},${step})"> picked & in the box</label>
           <button class="btn ghost sm" onclick="removeBoxItem(${ab.box_no},${step})" title="Take this item out of the box">✕ Remove from box</button>
         </div>
@@ -5593,11 +5600,11 @@ function detailBody(sku,opts){
   const panels=(cfg.panels||[]).map(pl=>{const src=(pl.field==='pngB')?sideBUrl(sku):imgFor(sku);
     return `<div class="dp"><div class="dp-lab">${esc(pl.label)}</div><div class="dp-img">${src?`<img src="${esc(src)}" onerror="this.parentNode.classList.add('ph')">`:''}<span class="ph-t">${initials(sku)}</span></div></div>`;}).join('')
     || `<div class="dp"><div class="dp-lab">Poster</div><div class="dp-img ${imgFor(sku)?'':'ph'}">${imgFor(sku)?`<img src="${esc(imgFor(sku))}" onerror="this.parentNode.classList.add('ph')">`:''}<span class="ph-t">${initials(sku)}</span></div></div>`;
-  const hasFn=b.fnsku||p.fnsku;
+  const hasFn=b.fnsku||p.fnsku||b.fnskuCode||p.fnskuCode;
   const fnskuBlock=hasFn?`<div class="dfnsku">
     <div class="dfnsku-h">🏷️ AMAZON FNSKU — REFERENCE BARCODE FOR THIS MODEL</div>
     <div class="dfnsku-row"><div class="dfnsku-img"><img src="${esc(fnUrl(sku))}" onerror="this.parentNode.classList.add('ph')"></div>
-    <div><div class="dfnsku-code">FNSKU: ${esc(b.fnskuCode||'—')}</div>
+    <div><div class="dfnsku-code">FNSKU: ${esc(b.fnskuCode||p.fnskuCode||'—')}</div>
     <div class="dfnsku-note">Print single labels on the <b>Zebra</b>, or open the full 30-up sheet, with the buttons below. The Print File goes to your <b>Fiery</b> separately — two different printers.</div></div></div></div>`:'';
   const actions=(cfg.actions||[]).filter(a=>!(a.field==='pdf12x18' && !p.pdf12x18)).map(a=>`<a class="btn ${a.primary?'primary':'ghost'} sm" href="${esc(assetUrl(sku,a.field))}" target="_blank" rel="noopener">${esc(a.label)}</a>`).join('');
   const fnskuBtn=hasFn?`<a class="btn gold sm" href="${esc(fnPdfUrl(sku))}" target="_blank" rel="noopener">Open 30-Up FNSKU Sheet</a>`:'';
@@ -5606,7 +5613,8 @@ function detailBody(sku,opts){
   const isBinder=isBinderSku(sku);
   const pieceWord=isBinder?'sheet':'poster';
   const shN=(p.sheets_db)||sh;
-  const bstrip = sh>1 ? `<div class="bstrip ${isBundleFile(p.pdf)?'':'bad'}">📦 ${shN}-${pieceWord} ${isBinder?'binder set':'bundle'} — prints the ${isBinder?'binder':'bundle'} master ${isBundleFile(p.pdf)?`<code>${esc(fileName(p.pdf))}</code>`:'<b>⚠ no master file — add it</b>'}</div>`:'';
+  const isMultipack=shN>1&&isBinder&&sku.endsWith('-2');
+  const bstrip = shN>1 ? `<div class="bstrip ${isMultipack?'multi':''} ${isBundleFile(p.pdf)?'':'bad'}">📦 ${isMultipack?shN+'-PACK — grab '+shN+' binders, apply 1 FNSKU':shN+'-'+pieceWord+' '+(isBinder?'binder set':'bundle')+' — prints the '+(isBinder?'binder':'bundle')+' master'} ${isBundleFile(p.pdf)?`<code>${esc(fileName(p.pdf))}</code>`:'<b>⚠ no master file — add it</b>'}</div>`:'';
   // ---- weights + proposed case pack (same math as the box planner) ----
   const w=(SETTINGS.weights&&SETTINGS.weights[size])||{sheet:1.8,mailer:6.4,base_in:0.105,per_sheet_in:0.02,columns:1};
   const itemOz=getItemOz(sku), shipOz=getShipOz(sku);   // honors any manual weight you typed on the Wholesale sheet
@@ -5624,7 +5632,7 @@ function detailBody(sku,opts){
   </div>`;
   return `<div class="dhead"><h3>${esc(p.title||sku)}</h3>
     <div class="dmeta">${esc(meta)}${isOld(p)?' <span class="bdg old">⚠ OLD SKU — use updated</span>':''}</div>
-    <div class="dkv"><code>${esc(sku)}</code>${p.asin?` &nbsp; <span class="asinlab">ASIN</span> <a class="asin-pill" href="https://www.amazon.com/dp/${esc(p.asin)}" target="_blank">${esc(p.asin)} ↗</a>`:''}</div></div>
+    <div class="dkv"><code>${esc(sku)}</code>${p.fnskuCode?` &nbsp; <span class="asinlab">FNSKU</span> <code class="fnsku-pill">${esc(p.fnskuCode)}</code>`:''} ${p.asin?` &nbsp; <span class="asinlab">ASIN</span> <a class="asin-pill" href="https://www.amazon.com/dp/${esc(p.asin)}" target="_blank">${esc(p.asin)} ↗</a>`:''}</div></div>
     ${bstrip}
     ${shipStats}
     <div class="dpanels">${panels}</div>
@@ -5669,12 +5677,12 @@ function quoteLogHtml(sku){ const qs=getQuotes(sku); if(!qs.length) return '<div
   return `<div class="pp-qlog"><div class="pp-qh">🧾 Quotes sent (${qs.length})</div>${qs.slice(0,6).map(q=>`<div class="pp-qrow"><span class="pp-qc">${esc(q.customer)}</span><span>${q.qty}×</span><span>@ $${(+q.price).toFixed(2)}</span><span class="pp-qt">$${(q.qty*q.price).toFixed(2)}</span><span class="pp-qd">${esc(q.date)}</span></div>`).join('')}</div>`; }
 function todayStr(){ try{ return new Date().toLocaleDateString(); }catch(e){ return ''; } }
 // ---- Send → Fiery popup (asks how many, then queues to the Fiery Hold folder) ----
-function openFieryPrompt(sku){ STATE.fierySku=sku; const m=document.getElementById('fierymodal'); if(!m)return; const p=byRaw.get(sku)||{};
-  document.getElementById('fieryTitle').textContent=(p.title||sku); document.getElementById('fierySize').textContent=(p.size||sizeOf(sku));
+function openFieryPrompt(sku,altSize){ STATE.fierySku=sku; STATE.fieryAltSize=altSize||''; const m=document.getElementById('fierymodal'); if(!m)return; const p=byRaw.get(sku)||{};
+  document.getElementById('fieryTitle').textContent=(p.title||sku)+(altSize?' ('+altSize+')':''); document.getElementById('fierySize').textContent=altSize||(p.size)||sizeOf(sku);
   const i=document.getElementById('fieryCopies'); i.value=1; m.classList.add('on'); setTimeout(()=>{i.focus();i.select();},40); }
 function closeFiery(){ const m=document.getElementById('fierymodal'); if(m)m.classList.remove('on'); }
 function confirmFiery(e){ if(e)e.preventDefault(); const sku=STATE.fierySku; const p=byRaw.get(sku)||{}; const n=Math.max(1,parseInt(document.getElementById('fieryCopies').value,10)||1);
-  const size=(p.size)||sizeOf(sku); queueFiery(sku,p.pdf||'',size,n); closeFiery(); }
+  const size=STATE.fieryAltSize||(p.size)||sizeOf(sku); const pdf=STATE.fieryAltSize?(p.pdf12x18||p.pdf||''):(p.pdf||''); STATE.fieryAltSize=''; queueFiery(sku,pdf,size,n); closeFiery(); }
 // ---- Print single FNSKU label -> Zebra (asks how many, then queues for the Zebra agent) ----
 function openZebraPrompt(sku,qty,ctx){ STATE.zebraSku=sku; STATE.zebraCtx=ctx||null; STATE.zebraBulk=null; zebraModalMode(false); zebraWhereUi(); const m=document.getElementById('zebramodal'); if(!m)return; const p=byRaw.get(sku)||{};
   document.getElementById('zebraTitle').textContent=(p.title||sku); document.getElementById('zebraCode').textContent=(p.fnskuCode||'');
@@ -6230,7 +6238,7 @@ async function switchOrder(id){
 function rebuildRegister(){
   STATE.register=STATE.boxes.filter(b=>b.status==='packed'||b.status==='shipped').map(b=>({box_no:b.box_no,order:SHIPMENT.name,shipment:SHIPMENT.no,carton:(b.carton||'20×14×10'),size:b.size,weight_lb:+(b.weight_oz/16).toFixed(1),units:b.units,status:b.status,packed_at:'',contents:b.items.map(i=>({asin:i.asin||'',sku:i.sku,qty:i.actual,requested:i.qty,label:i.label})),shorts:b.items.filter(i=>i.actual<i.qty).map(i=>({sku:i.sku,asin:i.asin||'',short:i.qty-i.actual}))})).sort((a,b)=>a.box_no-b.box_no);
 }
-function queueFiery(sku,file,size,copies){ SB.from('print_jobs').insert({batch_id:CURRENT_BATCH?CURRENT_BATCH.id:null,product_sku:sku,file_path:printPdfUrl(sku),size:size,copies:copies,type:'fiery',status:'queued'}).then(({error})=>{ toast(error?('Queue failed: '+error.message):('Sent '+copies+'× '+size+' → Fiery Hold folder')); }); }
+function queueFiery(sku,file,size,copies){ const fp=(size==='8.5x11'||size==='8.5×11')?printPdf12x18Url(sku):printPdfUrl(sku); SB.from('print_jobs').insert({batch_id:CURRENT_BATCH?CURRENT_BATCH.id:null,product_sku:sku,file_path:fp,size:size,copies:copies,type:'fiery',status:'queued'}).then(({error})=>{ toast(error?('Queue failed: '+error.message):('Sent '+copies+'× '+size+' → Fiery Hold folder')); }); }
 async function sendWholeQueue(){ const g=grouped(STATE.batch.filter(r=>r.hasPdf)); const all=[...g['11x17'],...g['8.5x11']]; if(!all.length){toast('Nothing to send');return;}
   const rows=all.map(r=>({batch_id:CURRENT_BATCH?CURRENT_BATCH.id:null,product_sku:r.sku,file_path:printPdfUrl(r.sku),size:r.size,copies:printQtyVal(r.sku,r.requested),type:'fiery',status:'queued'}));
   const {error}=await SB.from('print_jobs').insert(rows); toast(error?('Queue failed: '+error.message):('Queued '+rows.length+' jobs → Fiery (11×17 first, then 8.5×11)')); }
