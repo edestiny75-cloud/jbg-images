@@ -5671,11 +5671,7 @@ function editPieces(sku){ const p=byRaw.get(sku); if(!p)return; const cur=(p.she
   const n=parseInt(v,10); if(!(n>=1&&n<=200)){ toast('Enter a whole number from 1 to 200'); return; }
   /* guard 2026-10-26: Excel+Word single got 40 typed here (the order qty) and showed as a 40-in-1 pack */
   const looksSet=sheetsOf(sku)>1||isBundleFile(p.pdf)||/pack|set|bundle|master|complete|-2$/i.test(sku+' '+(p.title||''));
-  if(n>1&&!looksSet&&!confirm(sku+' looks like a SINGLE item.
-
-Set it to '+n+' '+(isBinderSku(sku)?'sheets':'posters')+' in ONE unit?
-
-This is NOT the order quantity - it changes the price, weight, case pack and the Box Planner badge.'))return;
+  if(n>1&&!looksSet&&!confirm(sku+' looks like a SINGLE item.\n\nSet it to '+n+' '+(isBinderSku(sku)?'sheets':'posters')+' in ONE unit?\n\nThis is NOT the order quantity - it changes the price, weight, case pack and the Box Planner badge.'))return;
   SB.from('products').update({sheets_per_unit:n,updated_at:new Date().toISOString()}).eq('sku',sku).then(({error})=>{
     if(error){ toast('Save failed: '+error.message); return; }
     p.sheets_db=n; toast(sku+' → '+n+' per unit (weight updated)'); renderModal(); }); }
