@@ -5682,7 +5682,7 @@ function openFieryPrompt(sku,altSize){ STATE.fierySku=sku; STATE.fieryAltSize=al
   const i=document.getElementById('fieryCopies'); i.value=1; m.classList.add('on'); setTimeout(()=>{i.focus();i.select();},40); }
 function closeFiery(){ const m=document.getElementById('fierymodal'); if(m)m.classList.remove('on'); }
 function confirmFiery(e){ if(e)e.preventDefault(); const sku=STATE.fierySku; const p=byRaw.get(sku)||{}; const n=Math.max(1,parseInt(document.getElementById('fieryCopies').value,10)||1);
-  const size=STATE.fieryAltSize||(p.size)||sizeOf(sku); const pdf=STATE.fieryAltSize?(p.pdf12x18||p.pdf||''):(p.pdf||''); STATE.fieryAltSize=''; queueFiery(sku,pdf,size,n); closeFiery(); }
+  const alt=!!(STATE.fieryAltSize&&p.pdf12x18); const size=STATE.fieryAltSize||(p.size)||sizeOf(sku); const pdf=STATE.fieryAltSize?(p.pdf12x18||p.pdf||''):(p.pdf||''); STATE.fieryAltSize=''; queueFiery(sku,pdf,size,n,alt); closeFiery(); }
 // ---- Print single FNSKU label -> Zebra (asks how many, then queues for the Zebra agent) ----
 function openZebraPrompt(sku,qty,ctx){ STATE.zebraSku=sku; STATE.zebraCtx=ctx||null; STATE.zebraBulk=null; zebraModalMode(false); zebraWhereUi(); const m=document.getElementById('zebramodal'); if(!m)return; const p=byRaw.get(sku)||{};
   document.getElementById('zebraTitle').textContent=(p.title||sku); document.getElementById('zebraCode').textContent=(p.fnskuCode||'');
@@ -6238,7 +6238,7 @@ async function switchOrder(id){
 function rebuildRegister(){
   STATE.register=STATE.boxes.filter(b=>b.status==='packed'||b.status==='shipped').map(b=>({box_no:b.box_no,order:SHIPMENT.name,shipment:SHIPMENT.no,carton:(b.carton||'20×14×10'),size:b.size,weight_lb:+(b.weight_oz/16).toFixed(1),units:b.units,status:b.status,packed_at:'',contents:b.items.map(i=>({asin:i.asin||'',sku:i.sku,qty:i.actual,requested:i.qty,label:i.label})),shorts:b.items.filter(i=>i.actual<i.qty).map(i=>({sku:i.sku,asin:i.asin||'',short:i.qty-i.actual}))})).sort((a,b)=>a.box_no-b.box_no);
 }
-function queueFiery(sku,file,size,copies){ const fp=(size==='8.5x11'||size==='8.5×11')?printPdf12x18Url(sku):printPdfUrl(sku); SB.from('print_jobs').insert({batch_id:CURRENT_BATCH?CURRENT_BATCH.id:null,product_sku:sku,file_path:fp,size:size,copies:copies,type:'fiery',status:'queued'}).then(({error})=>{ toast(error?('Queue failed: '+error.message):('Sent '+copies+'× '+size+' → Fiery Hold folder')); }); }
+function queueFiery(sku,file,size,copies,alt){ const fp=alt?printPdf12x18Url(sku):printPdfUrl(sku); /* _12x18 file only for the extra '8.5x11 -> Fiery' button on products that have one (Toddler sets); every other 8.5x11 uses its normal print PDF - fix 2026-10-26 */ SB.from('print_jobs').insert({batch_id:CURRENT_BATCH?CURRENT_BATCH.id:null,product_sku:sku,file_path:fp,size:size,copies:copies,type:'fiery',status:'queued'}).then(({error})=>{ toast(error?('Queue failed: '+error.message):('Sent '+copies+'× '+size+' → Fiery Hold folder')); }); }
 async function sendWholeQueue(){ const g=grouped(STATE.batch.filter(r=>r.hasPdf)); const all=[...g['11x17'],...g['8.5x11']]; if(!all.length){toast('Nothing to send');return;}
   const rows=all.map(r=>({batch_id:CURRENT_BATCH?CURRENT_BATCH.id:null,product_sku:r.sku,file_path:printPdfUrl(r.sku),size:r.size,copies:printQtyVal(r.sku,r.requested),type:'fiery',status:'queued'}));
   const {error}=await SB.from('print_jobs').insert(rows); toast(error?('Queue failed: '+error.message):('Queued '+rows.length+' jobs → Fiery (11×17 first, then 8.5×11)')); }
