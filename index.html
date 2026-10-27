@@ -677,6 +677,7 @@ tr.pq-selrow{background:rgba(78,207,154,.08)}
     <form onsubmit="confirmZebra(event)">
       <label class="mini-field"><span id="zebraAsk">How many labels?</span><input id="zebraCopies" type="number" min="1" max="500" value="1"></label>
       <div class="mini-note" id="zebraBulkNote" style="display:none"></div>
+      <label class="mini-field" id="zebraCoversWrap" style="flex-direction:row;align-items:center;gap:8px"><input id="zebraCovers" type="checkbox" style="width:auto"> <span>🖼 2 picture labels first + 2 box labels at the end</span></label>
       <div class="mini-field"><span>Which printer?</span><div class="zwhere"><label><input type="radio" name="zebraWhere" value="shipping"> 📦 Shipping</label><label><input type="radio" name="zebraWhere" value="packing"> 🧰 Packing</label></div></div>
       <div class="mini-note">Prints 2.25 × 1.25 in single labels on the chosen <b>Zebra ZD620</b>. The Zebra agent must be running on the print PC.</div>
       <div class="mini-actions"><button type="button" class="btn ghost sm" onclick="closeZebra()">Cancel</button><button type="submit" class="btn sm" id="zebraGo">Print → Zebra</button></div>
@@ -5759,7 +5760,7 @@ const TOOL_URL='https://edestiny75-cloud.github.io/jbg-images/';
 function openDeepLink(){ let code=''; try{ code=new URLSearchParams(location.search).get('p')||''; }catch(e){}
   if(!code)return; const p=findByCode(code); try{ history.replaceState(null,'',location.pathname); }catch(e){}
   if(!p){ toast(code+' is not in the catalog'); return; }
-  openProduct(p.sku); if(p.fnskuCode) setTimeout(()=>openZebraPrompt(p.sku),300); }
+  openProduct(p.sku); if(p.fnskuCode) setTimeout(()=>openZebraPrompt(p.sku,1,{scan:true}),300); }
 // Packer: scan -> pick that product in the "Add an item into Box N" row, then she types how many
 function scanIntoBox(n){ STATE.scanBox=n; openScan(); document.getElementById('scanMsg').textContent='Scan the FNSKU barcode (box label or sticker) to add it to Box '+n+'.'; }
 function scanPickForBox(p){ const n=STATE.scanBox, sel=document.getElementById('addSku');
@@ -5771,7 +5772,7 @@ function closeScan(){ STATE.scanBox=null; document.getElementById('scanmodal').c
 function scanFound(code){ const p=findByCode(code), msg=document.getElementById('scanMsg');
   if(!p){ msg.innerHTML='<b style="color:#b00">'+esc(String(code))+'</b> is not in the catalog — try again.'; return; }
   if(STATE.scanBox!=null){ scanPickForBox(p); return; }
-  if(navigator.vibrate)navigator.vibrate(80); closeScan(); toast('Found '+p.sku); openProduct(p.sku); }
+  if(navigator.vibrate)navigator.vibrate(80); closeScan(); toast('Found '+p.sku); openProduct(p.sku); if(p.fnskuCode) setTimeout(()=>openZebraPrompt(p.sku,1,{scan:true}),300); }
 function closeProd(){STATE.prod=null;document.getElementById('pmodal').classList.remove('on');}
 function manualPrint(sku,size){const n=parseInt((document.getElementById('mpCopies')||{}).value||'1',10);const p=byRaw.get(sku)||{};queueFiery(sku,p.pdf||'',size,n);}
 function pricingBlock(sku){ const sk=esc(sku).replace(/'/g,"\\'"); const cpId='mcp_'+sku.replace(/[^A-Za-z0-9]/g,'_');
@@ -5810,9 +5811,10 @@ function confirmFiery(e){ if(e)e.preventDefault(); const sku=STATE.fierySku; con
 // ---- Print single FNSKU label -> Zebra (asks how many, then queues for the Zebra agent) ----
 function openZebraPrompt(sku,qty,ctx){ STATE.zebraSku=sku; STATE.zebraCtx=ctx||null; STATE.zebraBulk=null; zebraModalMode(false); zebraWhereUi(); const m=document.getElementById('zebramodal'); if(!m)return; const p=byRaw.get(sku)||{};
   document.getElementById('zebraTitle').textContent=(p.title||sku); document.getElementById('zebraCode').textContent=(p.fnskuCode||'');
+  document.getElementById('zebraCovers').checked=!!(ctx&&ctx.scan);
   const i=document.getElementById('zebraCopies'); i.value=qty||1; m.classList.add('on'); setTimeout(()=>{i.focus();i.select();},40); }
 // Bulk: several products at once (Wholesale tab). Each product's run starts with a "NEXT ITEM" separator label.
-function zebraModalMode(bulk){ document.getElementById('zebraCodeWrap').style.display=bulk?'none':''; document.getElementById('zebraAsk').textContent=bulk?'How many labels of EACH?':'How many labels?'; document.getElementById('zebraBulkNote').style.display=bulk?'':'none'; }
+function zebraModalMode(bulk){ document.getElementById('zebraCodeWrap').style.display=bulk?'none':''; document.getElementById('zebraCoversWrap').style.display=bulk?'none':''; document.getElementById('zebraAsk').textContent=bulk?'How many labels of EACH?':'How many labels?'; document.getElementById('zebraBulkNote').style.display=bulk?'':'none'; }
 function openZebraBulk(skus){ const ok=skus.filter(k=>(byRaw.get(k)||{}).fnskuCode), no=skus.length-ok.length;
   if(!skus.length){ toast('Check the rows you want first'); return; } if(!ok.length){ toast('None of the checked products has an FNSKU yet'); return; }
   STATE.zebraBulk=ok; STATE.zebraSku=null; STATE.zebraCtx=null; zebraModalMode(true); zebraWhereUi();
@@ -5829,7 +5831,7 @@ function confirmZebra(e){ if(e)e.preventDefault(); const sku=STATE.zebraSku; con
     const rows=list.map((k,i)=>({batch_id:null,product_sku:k,file_path:fnSingleUrl(k,'zpl'),size:'zebra-cover',copies:n,type:'fnsku',printer:where,status:'queued',created_at:new Date(t0+i).toISOString()}));
     SB.from('print_jobs').insert(rows).then(({error})=>{ toast(error?('Queue failed: '+error.message):('Sent '+n+'× FNSKU labels for '+list.length+' products → '+wname)); });
     STATE.zebraBulk=null; closeZebra(); return; }
-  SB.from('print_jobs').insert({batch_id:CURRENT_BATCH?CURRENT_BATCH.id:null,product_sku:sku,file_path:fnSingleUrl(sku,'zpl'),size:'zebra',copies:n,type:'fnsku',printer:where,status:'queued'}).then(({error})=>{ toast(error?('Queue failed: '+error.message):('Sent '+n+'× FNSKU label → '+wname)); });
+  SB.from('print_jobs').insert({batch_id:CURRENT_BATCH?CURRENT_BATCH.id:null,product_sku:sku,file_path:fnSingleUrl(sku,'zpl'),size:(document.getElementById('zebraCovers').checked?'zebra-cover2':'zebra'),copies:n,type:'fnsku',printer:where,status:'queued'}).then(({error})=>{ toast(error?('Queue failed: '+error.message):('Sent '+n+'× FNSKU label → '+wname)); });
   const c=STATE.zebraCtx; if(c){ const b=STATE.boxes.find(x=>x.box_no===c.box); const it=b&&b.items[c.ix]; if(it&&it.sku===sku){ it.label='fnsku'; sbItem(it,{label_status:'fnsku'}); render(); } }   // Packer: mark the item's FNSKU label as printed
   closeZebra(); }
 // ---- Create quote (single product → downloadable/printable form + logs to the product) ----
