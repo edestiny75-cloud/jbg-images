@@ -5408,6 +5408,7 @@ function viewPacker(){
     const emptyAddPanel=`<div class="addrow">
       <span class="addlbl">＋ Add an item into Box ${ab.box_no}</span>
       <button class="btn sm gold" onclick="openPicker(${ab.box_no})">🖼 Add by picture</button>
+      <button class="btn sm gold" onclick="scanIntoBox(${ab.box_no})" title="Scan the FNSKU barcode on the box label or sticker">📷 Scan</button>
       <select id="addSku"><option value="">— or pick by name —</option>${addOpts0}</select>
       <input id="addQty" type="number" min="1" value="1" title="quantity">
       <button class="btn sm" onclick="addItemToBox(${ab.box_no})">Add to box</button></div>`;
@@ -5423,6 +5424,7 @@ function viewPacker(){
     const addPanel=`<div class="addrow">
       <span class="addlbl">＋ Add another item into Box ${ab.box_no}</span>
       <button class="btn sm gold" onclick="openPicker(${ab.box_no})">🖼 Add by picture</button>
+      <button class="btn sm gold" onclick="scanIntoBox(${ab.box_no})" title="Scan the FNSKU barcode on the box label or sticker">📷 Scan</button>
       <select id="addSku"><option value="">— or pick by name —</option>${addOpts}</select>
       <input id="addQty" type="number" min="1" value="1" title="quantity">
       <button class="btn sm" onclick="addItemToBox(${ab.box_no})">Add to box</button>
@@ -5758,9 +5760,17 @@ function openDeepLink(){ let code=''; try{ code=new URLSearchParams(location.sea
   if(!code)return; const p=findByCode(code); try{ history.replaceState(null,'',location.pathname); }catch(e){}
   if(!p){ toast(code+' is not in the catalog'); return; }
   openProduct(p.sku); if(p.fnskuCode) setTimeout(()=>openZebraPrompt(p.sku),300); }
-function closeScan(){ document.getElementById('scanmodal').classList.remove('on'); if(SCANNER){ const s=SCANNER; SCANNER=null; s.stop().then(()=>s.clear()).catch(()=>{}); } }
+// Packer: scan -> pick that product in the "Add an item into Box N" row, then she types how many
+function scanIntoBox(n){ STATE.scanBox=n; openScan(); document.getElementById('scanMsg').textContent='Scan the FNSKU barcode (box label or sticker) to add it to Box '+n+'.'; }
+function scanPickForBox(p){ const n=STATE.scanBox, sel=document.getElementById('addSku');
+  if(navigator.vibrate)navigator.vibrate(80); closeScan();
+  if(!sel||![...sel.options].some(o=>o.value===p.sku)){ toast(p.sku+' is not on this list — use Add by picture or check the list'); return; }
+  sel.value=p.sku; const q=document.getElementById('addQty'); if(q){ q.focus(); q.select(); }
+  toast('Box '+n+': '+shortName(p)+' — type how many, then Add to box'); }
+function closeScan(){ STATE.scanBox=null; document.getElementById('scanmodal').classList.remove('on'); if(SCANNER){ const s=SCANNER; SCANNER=null; s.stop().then(()=>s.clear()).catch(()=>{}); } }
 function scanFound(code){ const p=findByCode(code), msg=document.getElementById('scanMsg');
   if(!p){ msg.innerHTML='<b style="color:#b00">'+esc(String(code))+'</b> is not in the catalog — try again.'; return; }
+  if(STATE.scanBox!=null){ scanPickForBox(p); return; }
   if(navigator.vibrate)navigator.vibrate(80); closeScan(); toast('Found '+p.sku); openProduct(p.sku); }
 function closeProd(){STATE.prod=null;document.getElementById('pmodal').classList.remove('on');}
 function manualPrint(sku,size){const n=parseInt((document.getElementById('mpCopies')||{}).value||'1',10);const p=byRaw.get(sku)||{};queueFiery(sku,p.pdf||'',size,n);}
