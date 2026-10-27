@@ -5014,7 +5014,7 @@ function packingSlip(){
   const g=grouped(STATE.batch), L=[...g['11x17'],...g['8.5x11']];
   if(!L.length){toast('Nothing to pack — every line is held or zero');return;}
   // same slip for the Telegram bot (Sandra types SLIP / HOJA)
-  SB.from('settings').update({packing_slip:{name:SHIPMENT.name||'',made:new Date().toISOString(),lines:L.map(b=>({sku:b.sku,title:(byRaw.get(b.sku)||{}).title||b.title||b.sku,size:b.size,qty:b.requested,sheets:b.sheets||1,includes:BUNDLE_CONTENTS[b.sku]||''}))}}).eq('id',1).then(({error})=>{ if(error)toast('Slip not sent to the Telegram bot: '+error.message); });
+  SB.from('settings').update({packing_slip:{name:SHIPMENT.name||'',made:new Date().toISOString(),lines:L.map(b=>({list_sku:b.list_sku,asin:b.asin||'',sku:b.sku,title:(byRaw.get(b.sku)||{}).title||b.title||b.sku,size:b.size,qty:b.requested,sheets:b.sheets||1,includes:BUNDLE_CONTENTS[b.sku]||''}))}}).eq('id',1).then(({error})=>{ if(error)toast('Slip not sent to the Telegram bot: '+error.message); });
   const units=L.reduce((s,b)=>s+b.requested,0), sheets=L.reduce((s,b)=>s+b.requested*(b.sheets||1),0);
   const d=new Date(), md=(d.getMonth()+1)+'/'+d.getDate(), dm=d.getDate()+'/'+(d.getMonth()+1);
   const anyPack=L.some(b=>(b.sheets||1)>1), noFn=L.filter(b=>!(byRaw.get(b.sku)||{}).fnskuCode).length;
@@ -5220,12 +5220,13 @@ function viewIntake(){
   if(!b.length){ return `<datalist id="allskus">${ALL_SKU_OPTS}</datalist><h1>Weekly List Intake</h1><p class="sub">Upload Patrick's weekly list (.xlsx), <b>start a manual order</b> by picking from your catalog, or load the sample. Everything runs the same box-config + packer flow.</p>
     <div class="emptybox"><div class="eb-title">No list loaded</div>
     <div class="bar" style="justify-content:center"><label class="btn">⬆ Upload list (.xlsx) <input type="file" accept=".xlsx,.xls" style="display:none" onchange="onListFile(this)"></label>
+    <button class="btn gold" onclick="loadPatrickList()" title="The list from Patrick's SnapSKU link (paste the link to the Telegram bot)">📥 Load Patrick's list</button>
     <button class="btn gold" onclick="startManualOrder()">🖼 Start manual order</button>
     ${draftCount()?`<button class="btn ghost" onclick="openDrafts()">📂 Resume draft (${draftCount()})</button>`:''}
     <button class="btn ghost" onclick="loadSample()">Load sample list</button></div>
     <div class="note" style="margin-top:10px">A <b>manual order</b> lets you build a shipment by tapping products from your catalog and setting quantities — then it plans boxes (11×17 first, case packs, 50 lb cap) and packs exactly like Patrick's list.</div></div>`; }
   return `<datalist id="allskus">${ALL_SKU_OPTS}</datalist><h1>Weekly List Intake</h1><p class="sub">${esc(SHIPMENT.name)} · resolved by <b>ASIN first</b>. <b>Edit any quantity</b> or <b>⏸ hold</b> a line — Print Queue + boxes follow. Then <b>Save &amp; plan</b> to sync.</p>
-  <div class="bar"><label class="btn ghost">⬆ Upload <input type="file" accept=".xlsx,.xls" style="display:none" onchange="onListFile(this)"></label>
+  <div class="bar"><button class="btn ghost sm" onclick="loadPatrickList()">📥 Patrick's list</button><label class="btn ghost">⬆ Upload <input type="file" accept=".xlsx,.xls" style="display:none" onchange="onListFile(this)"></label>
   <button class="btn gold sm" onclick="openListPicker()">🖼 Add product</button>
   <button class="btn ghost sm" onclick="startManualOrder()">＋ New manual order</button>
   <button class="btn ghost sm" onclick="loadSample()">Load sample</button>
@@ -6287,6 +6288,15 @@ function onListFile(input){
   }catch(err){toast('Could not read file: '+err.message);} };
   reader.readAsArrayBuffer(f);
 }
+// Patrick posts a SnapSKU link in Slack; pasting it to the Telegram bot saves the list in settings.packing_slip
+async function loadPatrickList(){
+  const {data,error}=await SB.from('settings').select('packing_slip').eq('id',1).single();
+  const sl=data&&data.packing_slip;
+  if(error||!sl||!sl.lines||!sl.lines.length){ toast('No list yet — paste Patrick\'s SnapSKU link to the Telegram bot'); return; }
+  CURRENT_LIST=sl.lines.map(l=>({sku:l.list_sku||l.sku,asin:l.asin||'',title:l.title||'',requested:l.qty||0,notes:''}));
+  EDITS={}; CURRENT_BATCH=null; STATE._orderKind='fba'; STATE._srcName=sl.name||'Patrick list'; SHIPMENT={no:'(unsaved)',name:STATE._srcName};
+  STATE.batch=buildBatch(CURRENT_LIST); STATE.boxes=planBoxes(STATE.batch); updateShipChip(); go('intake');
+  toast('Loaded '+CURRENT_LIST.length+' lines from '+(sl.name||'Patrick')+(sl.made?' ('+String(sl.made).slice(0,10)+')':'')+' — review, then 🧾 Packing slip / Save & plan'); render(); }
 function loadSample(){ CURRENT_LIST=SAMPLE_LIST.slice(); EDITS={}; CURRENT_BATCH=null; STATE._srcName='Inventory Request — JAMS 25 (sample)'; SHIPMENT={no:'(unsaved)',name:STATE._srcName};
   STATE.batch=buildBatch(CURRENT_LIST); STATE.boxes=planBoxes(STATE.batch); updateShipChip(); toast('Sample list loaded — review, then Save & plan'); render(); }
 async function saveRun(){
