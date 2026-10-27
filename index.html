@@ -6459,7 +6459,7 @@ function showLogin(){ const a=document.getElementById('themeAudio'); try{a.pause
   const n=document.getElementById('loginName'); if(n) setTimeout(()=>n.focus(),50); }
 function backToSplash(){ document.getElementById('gateLogin').classList.add('off'); document.getElementById('gateSplash').classList.remove('off'); }
 function finishLogin(){ const a=document.getElementById('themeAudio'); try{a.pause();a.currentTime=0;}catch(e){}
-  try{ sessionStorage.setItem('jbg_auth','1'); }catch(e){}
+  try{ sessionStorage.setItem('jbg_auth','1'); localStorage.setItem('jbg_auth','1'); }catch(e){}   // remembered on this device (Sam 2026-10-27)
   const g=document.getElementById('gate'); g.classList.add('hide'); setTimeout(()=>{g.style.display='none';},340); }
 function doLogin(e){ if(e)e.preventDefault();
   const name=(document.getElementById('loginName').value||'').trim();
@@ -6468,7 +6468,7 @@ function doLogin(e){ if(e)e.preventDefault();
   if(name.toLowerCase()!==LOGIN_USER.toLowerCase() || pin!==PASSCODE){ err.textContent='Wrong username or password — try again.'; document.getElementById('loginPin').value=''; return; }
   err.textContent=''; STATE.packer=name; finishLogin();
 }
-// already signed in this browser session? skip the gate.
-(function(){ try{ if(sessionStorage.getItem('jbg_auth')==='1'){ const g=document.getElementById('gate'); if(g){ g.style.display='none'; } } }catch(e){} })();
+// already signed in on this device, or opened from a scan link (?p=FNSKU on the packing slip)? skip the gate.
+(function(){ try{ if(sessionStorage.getItem('jbg_auth')==='1' || localStorage.getItem('jbg_auth')==='1' || new URLSearchParams(location.search).get('p')){ const g=document.getElementById('gate'); if(g){ g.style.display='none'; } } }catch(e){} })();
 boot();
 </script></body></html>
