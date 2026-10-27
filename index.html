@@ -5019,13 +5019,13 @@ function packingSlip(){
   const anyPack=L.some(b=>(b.sheets||1)>1), noFn=L.filter(b=>!(byRaw.get(b.sku)||{}).fnskuCode).length;
   const T={
     en:{title:'FBA Packing List — Order '+md, sub:`${L.length} SKUs · ${units.toLocaleString()} sellable units · ${sheets.toLocaleString()} posters/sheets total. Check the box when the SKU is counted, labeled and boxed.`,
-      r1:'<b>1. LABEL</b> — one FNSKU sticker per unit (per envelope for packs). Cover any other barcode. <b>Labels:</b> send a photo of the barcode to the Telegram bot with the number (or scan it).',
+      r1:'<b>1. LABEL</b> — one FNSKU sticker per unit (per envelope for packs). Cover any other barcode. <b>Labels:</b> send a photo of the barcode to the Telegram bot with the number (or scan it). <b>Phone camera on the square code</b> opens the product in Sam&#39;s tool to print.',
       r2:'<b>PACKS (yellow boxes)</b> — make the number of envelopes shown, fill each one, seal. ONE FNSKU on the envelope + <b>"SOLD AS SET – DO NOT SEPARATE"</b> sticker.',
       r3:'<b>COUNT TWICE</b> — count the stack, recount before the box closes. Write SKU + qty on the box.',
       h:['#','Picture','What it is','Size','SKU','FNSKU label','Qty','✓'], make:'MAKE', env:'envelopes', each:'in each', tot:'posters', inc:'Includes', nofn:'NO FNSKU — ask Sam',
       foot:`TOTAL: ${L.length} SKUs · ${units.toLocaleString()} units &nbsp;|&nbsp; Packed by: ____________ &nbsp; Date: ________ &nbsp; Boxes: ______`},
     es:{title:'Lista de Empaque FBA — Pedido '+dm, sub:`${L.length} SKUs · ${units.toLocaleString()} unidades · ${sheets.toLocaleString()} pósters/hojas en total. Marque la casilla cuando el SKU esté contado, etiquetado y en caja.`,
-      r1:'<b>1. ETIQUETA</b> — una etiqueta FNSKU por unidad (por sobre en los paquetes). Tape cualquier otro código de barras. <b>Etiquetas:</b> mande una foto del código al bot de Telegram con el número (o escanéelo).',
+      r1:'<b>1. ETIQUETA</b> — una etiqueta FNSKU por unidad (por sobre en los paquetes). Tape cualquier otro código de barras. <b>Etiquetas:</b> mande una foto del código al bot de Telegram con el número (o escanéelo). <b>La cámara del teléfono en el código cuadrado</b> abre el producto en el programa de Sam para imprimir.',
       r2:'<b>PAQUETES (cuadros amarillos)</b> — haga la cantidad de sobres indicada, llene cada uno y ciérrelo. UNA etiqueta FNSKU en el sobre + la etiqueta <b>"SOLD AS SET – DO NOT SEPARATE"</b> (va en inglés).',
       r3:'<b>CONTAR DOS VECES</b> — cuente la pila y vuelva a contar antes de cerrar la caja. Escriba el SKU + cantidad en la caja.',
       h:['#','Foto','Qué es','Tamaño','SKU','Etiqueta FNSKU','Cant.','✓'], make:'HACER', env:'sobres', each:'en cada uno', tot:'pósters', inc:'Incluye', nofn:'SIN FNSKU — avise a Sam',
@@ -5035,12 +5035,12 @@ function packingSlip(){
       const qty=pk>1?`<td class="qty env">${t.make}<br>${b.requested}<small>${t.env}<br>${pk} ${t.each}<br>= ${b.requested*pk} ${t.tot}</small></td>`:`<td class="qty">${b.requested}</td>`;
       return `<tr><td class="n">${i+1}</td><td class="img">${img?`<img src="${esc(img)}">`:''}</td><td><div class="name">${esc(p.title||b.title||b.sku)}</div>${inc?`<div class="inc"><b>${t.inc}:</b> ${esc(inc)}</div>`:''}</td>
         <td>${esc(b.size.replace('x','×'))}</td><td class="sku">${esc(b.sku)}</td>
-        <td class="fn">${fn?`<svg class="bc" data-code="${esc(fn)}"></svg>`:`<span class="note warn">${t.nofn}</span>`}</td>${qty}<td class="chk"><div class="box"></div></td></tr>`; }).join('');
+        <td class="fn">${fn?`<div class="fnw"><svg class="bc" data-code="${esc(fn)}"></svg><span class="qr" data-url="${esc(TOOL_URL+'?p='+fn)}"></span></div>`:`<span class="note warn">${t.nofn}</span>`}</td>${qty}<td class="chk"><div class="box"></div></td></tr>`; }).join('');
     return `<div class="page ${lg}"><h1>${t.title}</h1><div class="sub">${esc(SHIPMENT.name||'')} · ${t.sub}</div>
       <div class="rules"><div>${t.r1}</div>${anyPack?`<div>${t.r2}</div>`:''}<div>${t.r3}</div></div>
       <table><thead><tr>${t.h.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table><div class="tot">${t.foot}</div></div>`; };
   const html=`<!doctype html><html><head><meta charset="utf-8"><title>Packing slip ${md}</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js"><\/script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js"><\/script><script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"><\/script>
   <style>@page{size:letter landscape;margin:.35in} *{box-sizing:border-box} body{font-family:Arial,Helvetica,sans-serif;color:#222;margin:0;font-size:11px;background:#fff}
   h1{font-size:22px;margin:0 0 2px;color:#6b3fa0} .sub{font-size:12px;color:#555;margin-bottom:8px}
   .page{page-break-after:always} .page:last-of-type{page-break-after:auto}
@@ -5052,7 +5052,7 @@ function packingSlip(){
   td.qty{font-size:20px;font-weight:bold;text-align:center;width:70px} td.qty small{display:block;font-size:9px;font-weight:normal;color:#666}
   td.qty.env{background:#ffe9a8;font-size:15px;width:90px;line-height:1.05} td.qty.env small{font-size:10px;color:#333;font-weight:bold}
   td.chk{width:46px} .box{width:24px;height:24px;border:2px solid #333;border-radius:4px;margin:auto}
-  .sku{font-family:Consolas,monospace;font-size:10px;color:#444;word-break:break-all;max-width:190px} td.fn{width:250px} .bc{display:block}
+  .sku{font-family:Consolas,monospace;font-size:10px;color:#444;word-break:break-all;max-width:190px} td.fn{width:330px} .bc{display:block} .fnw{display:flex;align-items:center;gap:6px} .qr svg{display:block;width:70px;height:70px}
   .name{font-size:13px;font-weight:bold} .inc{font-size:9.5px;color:#444;margin-top:2px}
   .note{background:#ffe9a8;padding:2px 6px;border-radius:3px;font-size:10px;font-weight:bold;display:inline-block} .warn{background:#ffd0d0}
   .rules{display:flex;gap:10px;margin:4px 0 8px} .rules div{flex:1;border:2px solid #6b3fa0;border-radius:6px;padding:6px 10px;font-size:11px} .rules b{color:#6b3fa0}
@@ -5068,7 +5068,8 @@ function packingSlip(){
   <script>
    document.querySelectorAll('.tb button[data-v]').forEach(b=>b.onclick=()=>{document.body.className=b.dataset.v==='both'?'':'only-'+b.dataset.v;document.querySelectorAll('.tb button[data-v]').forEach(x=>x.classList.toggle('on',x===b));});
    function draw(){ if(!window.JsBarcode){document.querySelectorAll('svg.bc').forEach(s=>s.outerHTML='<b style="font:bold 13px Consolas">'+s.dataset.code+'</b>');return;}
-     document.querySelectorAll('svg.bc').forEach(s=>JsBarcode(s,s.dataset.code,{format:'CODE128',height:40,width:2,margin:6,fontSize:13,font:'Consolas',textMargin:1})); }
+     document.querySelectorAll('svg.bc').forEach(s=>JsBarcode(s,s.dataset.code,{format:'CODE128',height:40,width:2,margin:6,fontSize:13,font:'Consolas',textMargin:1}));
+     if(window.qrcode) document.querySelectorAll('.qr').forEach(e=>{ const q=qrcode(0,'M'); q.addData(e.dataset.url); q.make(); e.innerHTML=q.createSvgTag(2,4); }); }
    if(document.readyState==='complete')draw(); else window.addEventListener('load',draw);
   <\/script></body></html>`;
   const w=window.open('','_blank'); if(!w){toast('Allow pop-ups to open the packing slip');return;}
@@ -5751,6 +5752,12 @@ async function openScan(){ document.getElementById('scanmodal').classList.add('o
     const F=Html5QrcodeSupportedFormats; SCANNER=new Html5Qrcode('scanCam',{formatsToSupport:[F.CODE_128,F.CODE_39,F.EAN_13,F.UPC_A,F.QR_CODE],verbose:false});
     await SCANNER.start({facingMode:'environment'},{fps:12,qrbox:(w,h)=>({width:Math.floor(w*0.9),height:Math.floor(Math.min(h,w)*0.45)})},t=>scanFound(t),()=>{});
   }catch(e){ msg.textContent='Camera not available ('+(e.message||e)+') — scan with a USB scanner or type the code below.'; SCANNER=null; } }
+const TOOL_URL='https://edestiny75-cloud.github.io/jbg-images/';
+// ?p=FNSKU (QR on the packing slip): open that product with the Zebra print box up
+function openDeepLink(){ let code=''; try{ code=new URLSearchParams(location.search).get('p')||''; }catch(e){}
+  if(!code)return; const p=findByCode(code); try{ history.replaceState(null,'',location.pathname); }catch(e){}
+  if(!p){ toast(code+' is not in the catalog'); return; }
+  openProduct(p.sku); if(p.fnskuCode) setTimeout(()=>openZebraPrompt(p.sku),300); }
 function closeScan(){ document.getElementById('scanmodal').classList.remove('on'); if(SCANNER){ const s=SCANNER; SCANNER=null; s.stop().then(()=>s.clear()).catch(()=>{}); } }
 function scanFound(code){ const p=findByCode(code), msg=document.getElementById('scanMsg');
   if(!p){ msg.innerHTML='<b style="color:#b00">'+esc(String(code))+'</b> is not in the catalog — try again.'; return; }
@@ -6366,6 +6373,7 @@ async function boot(){
     loadNewArrivals();   // fetch the new-arrivals registry (non-blocking) and light the bell
   }catch(e){ toast('Boot error: '+e.message); }
   updateShipChip(); renderNav(); render();
+  openDeepLink();
 }
 /* ===== New Arrivals: bell + page. Products stay "new" for 7 days from their added date. ===== */
 const NA_URL='https://storage.googleapis.com/jbg-print-files-2026/new_arrivals.json';
