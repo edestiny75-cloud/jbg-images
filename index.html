@@ -5036,7 +5036,7 @@ function packingSlip(){
       const qty=pk>1?`<td class="qty env">${t.make}<br>${b.requested}<small>${t.env}<br>${pk} ${t.each}<br>= ${b.requested*pk} ${t.tot}</small></td>`:`<td class="qty">${b.requested}</td>`;
       return `<tr><td class="n">${i+1}</td><td class="img">${img?`<img src="${esc(img)}">`:''}</td><td><div class="name">${esc(p.title||b.title||b.sku)}</div>${inc?`<div class="inc"><b>${t.inc}:</b> ${esc(inc)}</div>`:''}</td>
         <td>${esc(b.size.replace('x','×'))}</td><td class="sku">${esc(b.sku)}</td>
-        <td class="fn">${fn?`<div class="fnw"><svg class="bc" data-code="${esc(fn)}"></svg><span class="qr" data-url="${esc(TOOL_URL+'?p='+fn)}"></span></div>`:`<span class="note warn">${t.nofn}</span>`}</td>${qty}<td class="chk"><div class="box"></div></td></tr>`; }).join('');
+        <td class="fn">${fn?`<div class="fnw"><svg class="bc" data-code="${esc(fn)}"></svg><span class="qr" data-url="${esc(TOOL_URL+'?p='+fn+'&v=2')}"></span></div>`:`<span class="note warn">${t.nofn}</span>`}</td>${qty}<td class="chk"><div class="box"></div></td></tr>`; }).join('');
     return `<div class="page ${lg}"><h1>${t.title}</h1><div class="sub">${esc(SHIPMENT.name||'')} · ${t.sub}</div>
       <div class="rules"><div>${t.r1}</div>${anyPack?`<div>${t.r2}</div>`:''}<div>${t.r3}</div></div>
       <table><thead><tr>${t.h.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table><div class="tot">${t.foot}</div></div>`; };
