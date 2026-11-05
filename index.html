@@ -5123,7 +5123,8 @@ const lb=oz=>(oz/16).toFixed(1);
 function initials(sku){const t=(sku||'').replace(/^JB[GL]-(POS|BIN|CC)?-?(LAM-)?/,'').slice(0,4);return esc(t||'JBG');}
 function imgFor(sku,t){ const p=byRaw.get(sku); return (p&&p.thumb_url)||THUMBS[sku]||t||''; }
 const SB_PUB=SB_URL+'/storage/v1/object/public/thumbs/';
-function sideBUrl(sku){ return SB_PUB+encodeURIComponent(sku)+'_B.jpg'; }   // Side B (uploaded)
+function sideBUrl(sku){ const p=byRaw.get(sku); return (p&&/storage\.googleapis\.com/.test(p.thumb_url||''))?sideBAlt(sku,true):SB_PUB+encodeURIComponent(sku)+'_B.jpg'; }   // Side B: products whose thumb is on Google Cloud keep Side B there too (thumbs/{SKU}_B.jpg), older ones on Supabase
+function sideBAlt(sku,gcs){ return gcs?GCS_PRINTS+'thumbs/'+encodeURIComponent(sku)+'_B.jpg':SB_PUB+encodeURIComponent(sku)+'_B.jpg'; }
 const FN_FILE_ALIAS={'JBG-BIN-LAM-FAITH':'JBG-BIN-LAM_FAITH'};   // renamed to match Amazon 2026-10-13; the stored 30-up files keep the old name
 function fnUrl(sku){ return SB_PUB+encodeURIComponent(FN_FILE_ALIAS[sku]||sku)+'_FN.jpg'; }     // FNSKU 30-up sheet (uploaded)
 const PRINTS_PUB=SB_URL+'/storage/v1/object/public/prints/';
@@ -5693,7 +5694,7 @@ function detailBody(sku,opts){
   const size=sizeOfProd(p);
   const meta=b.meta||p.meta||(size+' laminated');
   const panels=(cfg.panels||[]).map(pl=>{const src=(pl.field==='pngB')?sideBUrl(sku):imgFor(sku);
-    return `<div class="dp"><div class="dp-lab">${esc(pl.label)}</div><div class="dp-img">${src?`<img src="${esc(src)}" onerror="this.parentNode.classList.add('ph')">`:''}<span class="ph-t">${initials(sku)}</span></div></div>`;}).join('')
+    return `<div class="dp"><div class="dp-lab">${esc(pl.label)}</div><div class="dp-img">${src?`<img src="${esc(src)}" ${pl.field==='pngB'?`data-alt="${esc(sideBAlt(sku,!/googleapis/.test(src)))}" `:''}onerror="if(this.dataset.alt){this.src=this.dataset.alt;this.dataset.alt='';}else this.parentNode.classList.add('ph')">`:''}<span class="ph-t">${initials(sku)}</span></div></div>`;}).join('')
     || `<div class="dp"><div class="dp-lab">Poster</div><div class="dp-img ${imgFor(sku)?'':'ph'}">${imgFor(sku)?`<img src="${esc(imgFor(sku))}" onerror="this.parentNode.classList.add('ph')">`:''}<span class="ph-t">${initials(sku)}</span></div></div>`;
   const hasFn=b.fnsku||p.fnsku||b.fnskuCode||p.fnskuCode;
   const fnskuBlock=hasFn?`<div class="dfnsku">
