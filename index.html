@@ -87,6 +87,7 @@ select,input[type=file],input[type=text],input:not([type]){font-size:13px;paddin
 .subnav button.on{background:var(--mint-d);color:#fff;border-color:var(--mint-d)}
 .sizenav{margin-top:-6px}.sizenav button{border-radius:8px;font-size:13px;padding:7px 14px}.sizenav button span{opacity:.65;font-weight:500;margin-left:4px}
 .cat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:14px}
+@media (min-width:700px){.cat-grid,.na-grid{grid-template-columns:repeat(5,minmax(0,1fr))}}   /* Sam: always 5 per row in Catalog + New Arrivals */
 .cat-card{background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 10px rgba(20,40,60,.06);cursor:pointer;transition:transform .08s}
 .cat-card:hover{transform:translateY(-2px)}
 .cat-card .im{width:100%;aspect-ratio:1/1;background:#dfe8e2;display:flex;align-items:center;justify-content:center;font-weight:800;color:#6b8577;font-size:13px}
