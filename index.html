@@ -5143,7 +5143,21 @@ function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t
 /* ---------- views ---------- */
 const NAV=[['catalog','Catalog'],['newarrivals','✨ New Arrivals'],['wholesale','Wholesale'],['intake','List Intake'],['print','Print Queue'],['jobs','Print Jobs'],['boxes','Box Planner'],['packer','Packer (iPad)'],['register','Box Register'],['settings','Settings']];
 function renderNav(){document.getElementById('nav').innerHTML=NAV.map(([k,l])=>`<button class="${STATE.view===k?'on':''}" onclick="go('${k}')">${l}</button>`).join('');}
-function go(v){STATE.view=v;renderNav();render();window.scrollTo(0,0);}
+function go(v){STATE.view=v;renderNav();render();window.scrollTo(0,0); if(v==='boxes'||v==='packer'||v==='register') refreshBoxesFromDb(); }
+// another device (iPad Packer, PC Planner) may have changed the boxes: reload them from Supabase
+let _boxRefresh=0;
+async function refreshBoxesFromDb(){
+  if(!CURRENT_BATCH||!CURRENT_BATCH.id||!STATE.boxes.some(b=>b._id)) return;   // only orders that are saved
+  if(Date.now()-_boxRefresh<3000) return; _boxRefresh=Date.now();
+  if(document.activeElement&&/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) return;   // don't yank a field you're typing in
+  const cartons={}; STATE.boxes.forEach(b=>{ if(b.carton)cartons[b.box_no]=b.carton; });
+  const prevReg=STATE.register, view=STATE.view;
+  try{ await loadBatchRow(CURRENT_BATCH); }catch(e){ return; }
+  STATE.boxes.forEach(b=>{ if(cartons[b.box_no])b.carton=cartons[b.box_no]; });
+  STATE.register=prevReg; syncRegister();
+  if(STATE.view===view) render();
+}
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible'&&(STATE.view==='boxes'||STATE.view==='packer'||STATE.view==='register')) refreshBoxesFromDb(); });
 
 function sizeSection(size,rows,cols){
   const cls=size==='8.5x11'?'s85':'';
@@ -5326,7 +5340,7 @@ function viewBoxes(){
   const card=b=>`<div class="box ${b.size==='8.5x11'?'s85':''}">
     <div class="bhead"><b>Box ${b.box_no}</b><span class="sz">${b.size}</span></div>
     <div class="bmeta">${b.units} units · ${lb(b.weight_oz)} lb</div>
-    <ul>${b.items.map((i,ix)=>`<li>${thumbEl(i.thumb,i.sku)}<input class="bqedit" type="number" min="0" value="${i.qty}" onchange="editBoxItem(${b.box_no},${ix},this.value)"><span class="bxsku">${esc(i.sku)}</span><button class="xbtn" title="Remove from this box" onclick="removeBoxItem(${b.box_no},${ix})">×</button></li>`).join('')||'<li style="color:#8397ab">emptied</li>'}</ul></div>`;
+    <ul>${b.items.map((i,ix)=>`<li>${thumbEl(i.thumb,i.sku)}<input class="bqedit" type="number" min="0" value="${i.qty}" onchange="editBoxItem(${b.box_no},${ix},this.value)">${isCommitted(b)&&i.actual!=null&&i.actual<i.qty?`<span class="short" title="Packed in the Packer">packed ${i.actual}</span>`:''}<span class="bxsku">${esc(i.sku)}</span><button class="xbtn" title="Remove from this box" onclick="removeBoxItem(${b.box_no},${ix})">×</button></li>`).join('')||'<li style="color:#8397ab">emptied</li>'}</ul></div>`;
   // ---- Build-a-pack tool ----
   const planUnits=PLAN_LIST.reduce((s,r)=>s+r.qty,0);
   const preview=PLAN_LIST.length?planBoxes(buildBatch(PLAN_LIST.map(r=>({sku:r.sku,asin:r.asin,title:r.title,requested:r.qty,notes:'plan'})))):[];
@@ -5465,6 +5479,7 @@ function viewPacker(){
 }
 
 function viewRegister(){
+  syncRegister();   // always built from the live boxes, so Packer / Box Planner edits show here
   const R=STATE.register;
   const allShorts=R.flatMap(r=>r.shorts.map(s=>({...s,box:r.box_no})));
   const rows=R.map(r=>{
@@ -5904,7 +5919,12 @@ function pickBox(n){ STATE.activeBox=n; STATE.packStep=0; const b=STATE.boxes.fi
 function packStep(i){ STATE.packStep=i; render(); }
 function startNext(){ const b=STATE.boxes.find(x=>x.status==='pending')||STATE.boxes.find(x=>x.status==='picking'&&x.box_no===STATE.activeBox); if(b){pickBox(b.box_no);} else toast('All boxes are packed 🎉'); }
 function releaseBox(n){ const b=STATE.boxes.find(x=>x.box_no===n); if(b && b.status==='picking'){ b.status='pending'; sbBox(b,{status:'pending'}); } STATE.activeBox=null; STATE.packStep=0; toast('Box '+n+' released — back in the pool'); render(); }
-function recomputeBox(b){ b.weight_oz=+b.items.reduce((s,i)=>s+i.qty*(i.unitOz||0),0).toFixed(1); b.units=b.items.reduce((s,i)=>s+i.qty,0); sbBox(b,{weight_oz:b.weight_oz,unit_count:b.units}); }
+function recomputeBox(b){ const n=i=>isCommitted(b)?(i.actual==null?i.qty:i.actual):i.qty;   // boxes being packed count what was actually packed
+  b.weight_oz=+b.items.reduce((s,i)=>s+n(i)*(i.unitOz||0),0).toFixed(1); b.units=b.items.reduce((s,i)=>s+n(i),0); sbBox(b,{weight_oz:b.weight_oz,unit_count:b.units});
+  if(b.status==='packed'||b.status==='shipped') boxChangedAfterPack(b); }
+// a packed box was edited (Packer or Box Planner): refresh its Register row and re-send it to the Google Sheet (debounced)
+const _sheetTimers={};
+function boxChangedAfterPack(b){ syncRegister(); clearTimeout(_sheetTimers[b.box_no]); _sheetTimers[b.box_no]=setTimeout(()=>sheetPushBox(b.box_no),1500); }
 function editBoxItem(n,ix,v){ const b=STATE.boxes.find(x=>x.box_no===n); if(!b)return; let q=Math.max(0,parseInt(v,10)||0); b.items[ix].qty=q; if(b.items[ix].actual==null||b.items[ix].actual>q)b.items[ix].actual=q; sbItem(b.items[ix],{qty:q,actual_qty:b.items[ix].actual}); recomputeBox(b); render(); }
 function removeBoxItem(n,ix){ const b=STATE.boxes.find(x=>x.box_no===n); if(!b)return; const it=b.items[ix]; if(it._id)SB.from('box_items').delete().eq('id',it._id).then(()=>{}); b.items.splice(ix,1); recomputeBox(b);
   if(isCommitted(b)){ reflowPending(); toast('Removed '+shortName(it)+' from Box '+n+' — its pieces went back to the pool to pack elsewhere'); }
@@ -6211,7 +6231,7 @@ async function addQuickBox(){
   if(CURRENT_BATCH&&CURRENT_BATCH.id){ try{ const {data}=await SB.from('boxes').insert({batch_id:CURRENT_BATCH.id,box_no:nextNo,size:'11x17',weight_oz:0,unit_count:0,status:'picking'}).select().single(); if(data)box._id=data.id; }catch(e){} }
   toast('Box '+nextNo+' added'); render();
 }
-function setActual(n,ix,val){ const b=STATE.boxes.find(x=>x.box_no===n); if(!b)return; let v=parseInt(val,10); if(isNaN(v)||v<0)v=0; if(v>b.items[ix].qty)v=b.items[ix].qty; b.items[ix].actual=v; sbItem(b.items[ix],{actual_qty:v}); render(); }
+function setActual(n,ix,val){ const b=STATE.boxes.find(x=>x.box_no===n); if(!b)return; let v=parseInt(val,10); if(isNaN(v)||v<0)v=0; if(v>b.items[ix].qty)v=b.items[ix].qty; b.items[ix].actual=v; sbItem(b.items[ix],{actual_qty:v}); recomputeBox(b); render(); }
 function togglePick(n,ix){ const b=STATE.boxes.find(x=>x.box_no===n); if(b){const it=b.items[ix];it.picked=!it.picked; sbItem(it,{picked:it.picked}); if(it.picked && ix<b.items.length-1)STATE.packStep=ix+1; render();} }
 function packBox(n){ const b=STATE.boxes.find(x=>x.box_no===n); if(!b)return;
   b.status='packed'; sbBox(b,{status:'packed',packed_at:new Date().toISOString(),weight_oz:b.items.reduce((s,i)=>s+i.actual*(i.unitOz||0),0),unit_count:b.items.reduce((s,i)=>s+i.actual,0)});
@@ -6373,8 +6393,13 @@ async function switchOrder(id){
   toast('Now packing: '+(bs[0].name||('Order '+id)));
   render();
 }
+function syncRegister(){
+  const prev={}; (STATE.register||[]).forEach(r=>{ prev[r.box_no]=r; });
+  rebuildRegister();
+  STATE.register.forEach(r=>{ const o=prev[r.box_no]; if(o){ if(o.packed_at)r.packed_at=o.packed_at; if(o.shipped_at)r.shipped_at=o.shipped_at; if(o.carton&&!STATE.boxes.find(b=>b.box_no===r.box_no&&b.carton))r.carton=o.carton; } });
+}
 function rebuildRegister(){
-  STATE.register=STATE.boxes.filter(b=>b.status==='packed'||b.status==='shipped').map(b=>({box_no:b.box_no,order:SHIPMENT.name,shipment:SHIPMENT.no,carton:(b.carton||'20×14×10'),size:b.size,weight_lb:+(b.weight_oz/16).toFixed(1),units:b.units,status:b.status,packed_at:'',contents:b.items.map(i=>({asin:i.asin||'',sku:i.sku,qty:i.actual,requested:i.qty,label:i.label})),shorts:b.items.filter(i=>i.actual<i.qty).map(i=>({sku:i.sku,asin:i.asin||'',short:i.qty-i.actual}))})).sort((a,b)=>a.box_no-b.box_no);
+  STATE.register=STATE.boxes.filter(b=>b.status==='packed'||b.status==='shipped').map(b=>({box_no:b.box_no,order:SHIPMENT.name,shipment:SHIPMENT.no,carton:(b.carton||'20×14×10'),size:b.size,weight_lb:+(b.items.reduce((s,i)=>s+(i.actual==null?i.qty:i.actual)*(i.unitOz||0),0)/16).toFixed(1),units:b.items.reduce((s,i)=>s+(i.actual==null?i.qty:i.actual),0),status:b.status,packed_at:'',contents:b.items.map(i=>({asin:i.asin||'',sku:i.sku,qty:i.actual,requested:i.qty,label:i.label})),shorts:b.items.filter(i=>i.actual<i.qty).map(i=>({sku:i.sku,asin:i.asin||'',short:i.qty-i.actual}))})).sort((a,b)=>a.box_no-b.box_no);
 }
 function queueFiery(sku,file,size,copies,alt){ const fp=alt?printPdf12x18Url(sku):printPdfUrl(sku); /* _12x18 file only for the extra '8.5x11 -> Fiery' button on products that have one (Toddler sets); every other 8.5x11 uses its normal print PDF - fix 2026-10-26 */ SB.from('print_jobs').insert({batch_id:CURRENT_BATCH?CURRENT_BATCH.id:null,product_sku:sku,file_path:fp,size:size,copies:copies,type:'fiery',status:'queued'}).then(({error})=>{ toast(error?('Queue failed: '+error.message):('Sent '+copies+'× '+size+' → Fiery Hold folder')); }); }
 async function sendWholeQueue(){ const g=grouped(STATE.batch.filter(r=>r.hasPdf)); const all=[...g['11x17'],...g['8.5x11']]; if(!all.length){toast('Nothing to send');return;}
