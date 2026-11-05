@@ -6410,7 +6410,7 @@ async function boot(){
   try{
     const {data:prods,error}=await SB.from('products').select('*');
     if(error)toast('Load error: '+error.message);
-    PRODUCTS=(prods||[]).map(p=>({sku:p.sku,title:p.title||'',meta:(BYSKU[p.sku]&&BYSKU[p.sku].meta)||'',line:p.line||'other',size:p.size||sizeOf(p.sku),thumb_url:p.thumb_url||'',pdf:p.pdf_path||'',pdf12x18:p.pdf12x18_path||'',fnsku:p.fnsku_path||'',fnskuCode:p.fnsku_code||'',asin:p.asin||'',sheets_db:p.sheets_per_unit||1,badge:''}));
+    PRODUCTS=(prods||[]).map(p=>({sku:p.sku,title:p.title||'',meta:(BYSKU[p.sku]&&BYSKU[p.sku].meta)||'',line:p.line||'other',size:p.size||sizeOf(p.sku),thumb_url:p.thumb_url||'',pdf:p.pdf_path||'',pdf12x18:p.pdf12x18_path||'',fnsku:p.fnsku_path||'',fnskuCode:p.fnsku_code||'',asin:p.asin||'',sheets_db:p.sheets_per_unit||1,added:(p.created_at||'').slice(0,10),badge:''}));
     buildIndexes();
     LINES=[...new Set(PRODUCTS.map(p=>p.line))]; STATE.catLine=LINES[0]||'';
     const {data:st}=await SB.from('settings').select('*').eq('id',1).single();
@@ -6438,9 +6438,12 @@ async function loadNewArrivals(){
     STATE.newArrivals=items
       .filter(it=>it.sku && daysSince(it.added)<NA_WINDOW_DAYS && daysSince(it.added)>=0)
       .map(it=>{ const p=byRaw.get(it.sku); return p?{...p, added:it.added, ago:daysSince(it.added)}:null; })
-      .filter(Boolean)
-      .sort((a,b)=>a.ago-b.ago);
-  }catch(e){ /* offline / no registry — just show nothing */ }
+      .filter(Boolean);
+  }catch(e){ /* offline / no registry — fall through to the automatic list */ }
+  // automatic: anything uploaded to the products table in the last 7 days (products.created_at)
+  const have=new Set(STATE.newArrivals.map(p=>p.sku));
+  PRODUCTS.forEach(p=>{ if(p.added && p.line!=='archived' && !have.has(p.sku)){ const d=daysSince(p.added); if(d>=0 && d<NA_WINDOW_DAYS){ STATE.newArrivals.push({...p, ago:d}); have.add(p.sku); } } });
+  STATE.newArrivals.sort((a,b)=>a.ago-b.ago);
   renderBell();
 }
 function naUnseenCount(){ const seen=naSeen(); return STATE.newArrivals.filter(p=>!seen || p.added>seen).length; }
