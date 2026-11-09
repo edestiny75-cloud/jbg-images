@@ -5008,7 +5008,7 @@ function buildBatch(list){
     return {asin:r.asin,title:r.title,requested,orig:r.requested,held:!!ed.hold,list_sku:r.sku,notes:r.notes,
       sku:p?p.sku:r.sku, size, status, cands:cands||[], sheets:sh,
       bundle:sh>1, bundleOk:(sh<=1)||isBundleFile(p?p.pdf:''), superseded:isOld(p),
-      thumb:p?p.thumb:'', pdf:p?p.pdf:'', fnsku:p?p.fnsku:'', hasPdf:!!(p&&p.pdf)};});
+      thumb:p?p.thumb:'', pdf:p?p.pdf:'', fnsku:p?p.fnsku:'', line:p?(p.line||''):'', hasPdf:!!(p&&p.pdf)};});
 }
 function activeLines(batch){ return batch.filter(b=>!b.held && b.requested>0); }
 // Packing slip for the loaded list (Sandra). Same layout as the hand-built order_MMDD guides: picture, name, size, SKU,
@@ -5263,6 +5263,8 @@ function viewIntake(){
 }
 
 function fileName(p){return (p||'').split('/').pop();}
+// Two-sided note on the Print Queue. Only Maps have a B&W Side B; Map Practice Sheets are B&W on both sides; every other two-sided poster is color on both sides (Sam 2026-11-09).
+function sideNote(r){ if(r.size!=='11x17'||!/2sided|2-sided|_2sided/i.test(r.pdf||''))return ''; const t=r.line==='maps'?'Side A color · Side B B&amp;W':r.line==='practicemaps'?'Both sides B&amp;W':'2-sided · both sides color'; return `<div class="side-note">${t}</div>`; }
 function viewPrint(){
   const g=grouped(STATE.batch.filter(r=>r.hasPdf));
   g['11x17'].sort(catOrderRow); g['8.5x11'].sort(catOrderRow);   // number order · bundles at end
@@ -5273,7 +5275,7 @@ function viewPrint(){
     <tr class="${sel?'pq-selrow':''}"><td class="pq-chk ${sel?'on':''}" onclick="printToggle('${sk}')" title="Check to send in bulk">${sel?'✓':''}</td>
     <td><div class="prodcell">${thumbEl(r.thumb,r.sku)}<div class="pcell-txt"><div class="pcell-title">${esc((r.title||r.sku)).slice(0,44)}</div><code>${esc(r.sku)}</code>${r.bundle?`<div class="pcell-badges"><span class="bdg bundle">📦 ${r.sheets}-poster bundle master</span></div>`:''}</div></div></td>
     <td class="q qbig2">${r.requested}</td>
-    <td class="filecell" title="${esc(r.pdf)}"><code>${esc(fileName(r.pdf))}</code>${r.size==='11x17'&&/2sided|2-sided|_2sided/i.test(r.pdf)?'<div class="side-note">Side A color · Side B B&amp;W</div>':''}</td>
+    <td class="filecell" title="${esc(r.pdf)}"><code>${esc(fileName(r.pdf))}</code>${sideNote(r)}</td>
     <td class="pq-send"><input class="pq-qty" type="number" min="1" max="999" value="${qv}" title="How many to send — change it to send only some (e.g. 40)" onclick="event.stopPropagation()" onchange="setPrintQty('${sk}',this.value)">
     <button class="btn sm" onclick="queueFiery('${sk}','${esc(r.pdf)}','${r.size}',printQtyVal('${sk}',${r.requested}))">Send → Fiery</button>
     ${qv!==r.requested?`<button class="pq-reset" title="Reset to the full list quantity (${r.requested})" onclick="resetPrintQty('${sk}')">↺ ${r.requested}</button>`:''}</td></tr>`;}).join('')}</tbody></table>`;
