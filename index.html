@@ -5436,7 +5436,7 @@ function viewPacker(){
       <button class="btn sm" onclick="addItemToBox(${ab.box_no})">Add to box</button></div>`;
     if(total===0){
       body=`<div class="boxbanner"><div><div class="bb-no">BOX ${ab.box_no}</div><div class="bb-sub">use a <b>${esc(ab.carton||'20×14×10')}</b> carton · empty — add items below, or release it</div></div>
-        <button class="btn ghost sm" onclick="releaseBox(${ab.box_no})">✕ Release box</button></div>${emptyAddPanel}`;
+        <button class="btn ghost sm" onclick="releaseBox(${ab.box_no})">✕ Release box</button><button class="btn ghost sm" style="color:#ff8f8a" onclick="deleteBox(${ab.box_no})" title="Remove this box completely">🗑 Delete box</button></div>${emptyAddPanel}`;
       return `<h1>Packer · iPad</h1><p class="sub">Pick a box, then click through it one item at a time — big picture, the exact amount to pick, and the <b>UPC / FNSKU / WPS</b> label. Two packers can each take a different box.</p>${picker}${body}`;
     }
     const i=ab.items[step];
@@ -5455,7 +5455,7 @@ function viewPacker(){
     body=`<div class="boxbanner">
       <div><div class="bb-no">BOX ${ab.box_no}</div><div class="bb-sub">use a <b>${esc(ab.carton||'20×14×10')}</b> carton · ${ab.size} posters</div></div>
       <div class="bb-stat"><span>${ab.units} units</span><span>${lb(ab.weight_oz)} lb</span><span>${picked}/${total} picked</span></div>
-      <button class="btn ghost sm" onclick="releaseBox(${ab.box_no})" title="Put this box back in the pool">✕ Not this box — release</button></div>
+      <button class="btn ghost sm" onclick="releaseBox(${ab.box_no})" title="Put this box back in the pool">✕ Not this box — release</button><button class="btn ghost sm" style="color:#ff8f8a" onclick="deleteBox(${ab.box_no})" title="Remove this box completely">🗑 Delete box</button></div>
       <div class="onecard wide ${i.picked?'oc-done':''}">
         <div class="oc-count">Item ${step+1} of ${total} · Box ${ab.box_no}</div>
         <div class="oc-detail">${detailBody(i.sku,{hidePrint:true})}</div>
@@ -5468,7 +5468,7 @@ function viewPacker(){
             <button class="${i.label==='upc'?'done':''}" onclick="printLabel(${ab.box_no},${step},'upc')">Print UPC</button>
             <button class="${i.label==='fnsku'?'done':''}" onclick="printLabel(${ab.box_no},${step},'fnsku')">Print FNSKU → Zebra</button>
             <button class="${i.label==='wps'?'done':''}" onclick="printLabel(${ab.box_no},${step},'wps')">Print WPS</button>
-          </div>`:'<div class="oc-nolbl">Wholesale — no Amazon labels</div>'}
+          </div>`:(iProd.fnskuCode?`<div class="oc-lbls"><button onclick="printLabel(${ab.box_no},${step},'fnsku')" title="Print or reprint FNSKU labels (choose how many in the popup)">🖨 FNSKU → Zebra</button></div>`:'<div class="oc-nolbl">No FNSKU label for this item</div>')}
           ${iProd.pdf?`<div class="oc-lbls" style="margin-top:6px"><button class="btn sm" onclick="openFieryPrompt('${esc(i.sku).replace(/'/g,"\\'")}')">🖨 Send → Fiery</button>${iProd.pdf12x18?`<button class="btn ghost sm" onclick="openFieryPrompt('${esc(i.sku).replace(/'/g,"\\'")}','8.5x11')">🖨 8.5×11 → Fiery</button>`:''}</div>`:''}
           <label class="oc-check"><input type="checkbox" ${i.picked?'checked':''} onchange="togglePick(${ab.box_no},${step})"> picked & in the box</label>
           <button class="btn ghost sm" onclick="removeBoxItem(${ab.box_no},${step})" title="Take this item out of the box">✕ Remove from box</button>
@@ -5926,6 +5926,14 @@ function unitOzFor(sku,size){ const p=byRaw.get(sku); if(p&&+p.ship_oz>0)return 
 function pickBox(n){ STATE.activeBox=n; STATE.packStep=0; const b=STATE.boxes.find(x=>x.box_no===n); if(b&&b.status==='pending'){b.status='picking';sbBox(b,{status:'picking'});} render(); }
 function packStep(i){ STATE.packStep=i; render(); }
 function startNext(){ const b=STATE.boxes.find(x=>x.status==='pending')||STATE.boxes.find(x=>x.status==='picking'&&x.box_no===STATE.activeBox); if(b){pickBox(b.box_no);} else toast('All boxes are packed 🎉'); }
+async function deleteBox(n){ const b=STATE.boxes.find(x=>x.box_no===n); if(!b)return;
+  const units=b.items.reduce((s,i)=>s+(i.actual==null?i.qty:i.actual),0);
+  const msg='Delete Box '+n+'?'+(b.items.length?' It has '+b.items.length+' item(s) / '+units+' units - they will be removed from this box.':'')+((b.status==='packed'||b.status==='shipped')?' This box is already '+b.status+' (it stays in the Google Sheet).':'');
+  if(!confirm(msg))return;
+  if(b._id){ try{ await SB.from('box_items').delete().eq('box_id',b._id); await SB.from('boxes').delete().eq('id',b._id); }catch(e){ toast('Could not delete Box '+n+' — try again'); return; } }
+  STATE.boxes=STATE.boxes.filter(x=>x!==b); STATE.register=(STATE.register||[]).filter(r=>r.box_no!==n);
+  if(STATE.activeBox===n){ STATE.activeBox=null; STATE.packStep=0; }
+  toast('Box '+n+' deleted'); render(); }
 function releaseBox(n){ const b=STATE.boxes.find(x=>x.box_no===n); if(b && b.status==='picking'){ b.status='pending'; sbBox(b,{status:'pending'}); } STATE.activeBox=null; STATE.packStep=0; toast('Box '+n+' released — back in the pool'); render(); }
 function recomputeBox(b){ const n=i=>isCommitted(b)?(i.actual==null?i.qty:i.actual):i.qty;   // boxes being packed count what was actually packed
   b.weight_oz=+b.items.reduce((s,i)=>s+n(i)*(i.unitOz||0),0).toFixed(1); b.units=b.items.reduce((s,i)=>s+n(i),0); sbBox(b,{weight_oz:b.weight_oz,unit_count:b.units});
