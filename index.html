@@ -4988,7 +4988,7 @@ function setWt(sku,v){ v=(''+v).replace(/[^0-9.]/g,''); if(v==='')delete WT[sku]
 // B2C shipping weight (item + envelope) — manual override wins, else item + mailer. Drives the FBA 50 lb case-pack rule.
 let SHIPWT={}; try{ SHIPWT=JSON.parse(localStorage.getItem('jbg_shipwt')||'{}')||{}; }catch(e){ SHIPWT={}; }
 function getShipManual(sku){ const v=SHIPWT[sku]; return (v==null||v==='')?'':(+v); }
-function computedShipOz(sku){ return getItemOz(sku)+(wSet(sku).mailer||0); }
+function computedShipOz(sku){ const p=byRaw.get(sku); if(p&&+p.ship_oz>0)return +p.ship_oz; return getItemOz(sku)+(wSet(sku).mailer||0); }
 function getShipOz(sku){ const m=getShipManual(sku); return m!==''?m:computedShipOz(sku); }
 function setShipWt(sku,v){ v=(''+v).replace(/[^0-9.]/g,''); if(v==='')delete SHIPWT[sku]; else SHIPWT[sku]=v; try{ localStorage.setItem('jbg_shipwt',JSON.stringify(SHIPWT)); }catch(e){} }
 // Persistent per-item SIZE memory (per-device). When you correct a line's size in List Intake,
@@ -5922,7 +5922,7 @@ function renderModal(){
 function mapSku(listSku,prodSku){ if(!prodSku)return; if(!byRaw.has(prodSku)){toast('No product with SKU '+prodSku);return;} ALIASES[listSku]=prodSku; SB.from('sku_aliases').upsert({list_sku:listSku,product_sku:prodSku}).then(()=>{}); replan(); toast('Mapped '+listSku+' → '+prodSku+' (saved)'); render(); }
 function sbBox(b,patch){ if(b&&b._id) SB.from('boxes').update(patch).eq('id',b._id).then(()=>{}); }
 function sbItem(i,patch){ if(i&&i._id) SB.from('box_items').update(patch).eq('id',i._id).then(()=>{}); }
-function unitOzFor(sku,size){ const p=byRaw.get(sku); const sh=(p&&p.sheets_db)||sheetsOf(sku); const w=(SETTINGS.weights&&SETTINGS.weights[size])||{sheet:1.8,mailer:6.4}; return sh*w.sheet+w.mailer; }
+function unitOzFor(sku,size){ const p=byRaw.get(sku); if(p&&+p.ship_oz>0)return +p.ship_oz; /* Sam's scale weight (products.ship_oz) wins */ size=(p&&p.size)||size||sizeOf(sku); /* each item weighs by its OWN size, not the box's */ const sh=(p&&p.sheets_db)||sheetsOf(sku); const w=(SETTINGS.weights&&SETTINGS.weights[size])||{sheet:1.8,mailer:6.4}; return sh*w.sheet+w.mailer; }
 function pickBox(n){ STATE.activeBox=n; STATE.packStep=0; const b=STATE.boxes.find(x=>x.box_no===n); if(b&&b.status==='pending'){b.status='picking';sbBox(b,{status:'picking'});} render(); }
 function packStep(i){ STATE.packStep=i; render(); }
 function startNext(){ const b=STATE.boxes.find(x=>x.status==='pending')||STATE.boxes.find(x=>x.status==='picking'&&x.box_no===STATE.activeBox); if(b){pickBox(b.box_no);} else toast('All boxes are packed 🎉'); }
@@ -6418,7 +6418,7 @@ async function boot(){
   try{
     const {data:prods,error}=await SB.from('products').select('*');
     if(error)toast('Load error: '+error.message);
-    PRODUCTS=(prods||[]).map(p=>({sku:p.sku,title:p.title||'',meta:(BYSKU[p.sku]&&BYSKU[p.sku].meta)||'',line:p.line||'other',size:p.size||sizeOf(p.sku),thumb_url:p.thumb_url||'',pdf:p.pdf_path||'',pdf12x18:p.pdf12x18_path||'',fnsku:p.fnsku_path||'',fnskuCode:p.fnsku_code||'',asin:p.asin||'',sheets_db:p.sheets_per_unit||1,added:(p.created_at||'').slice(0,10),badge:''}));
+    PRODUCTS=(prods||[]).map(p=>({sku:p.sku,title:p.title||'',meta:(BYSKU[p.sku]&&BYSKU[p.sku].meta)||'',line:p.line||'other',size:p.size||sizeOf(p.sku),thumb_url:p.thumb_url||'',pdf:p.pdf_path||'',pdf12x18:p.pdf12x18_path||'',fnsku:p.fnsku_path||'',fnskuCode:p.fnsku_code||'',asin:p.asin||'',sheets_db:p.sheets_per_unit||1,ship_oz:p.ship_oz==null?null:+p.ship_oz,added:(p.created_at||'').slice(0,10),badge:''}));
     buildIndexes();
     LINES=[...new Set(PRODUCTS.map(p=>p.line))]; STATE.catLine=LINES[0]||'';
     const {data:st}=await SB.from('settings').select('*').eq('id',1).single();
